@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+.claude/
+meals_tracker.html
+meals_tracker_files/
+*.exe

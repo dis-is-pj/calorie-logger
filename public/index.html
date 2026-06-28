@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meal Calorie Logger</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      color: #111;
+      letter-spacing: -0.3px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    .field { margin-bottom: 18px; }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 1rem;
+      color: #1a1a1a;
+      background: #fafafa;
+      transition: border-color 0.15s;
+      appearance: none;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #4f46e5;
+      background: #fff;
+    }
+
+    textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      border: 1.5px dashed #ccc;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      color: #666;
+      background: #fafafa;
+      transition: border-color 0.15s;
+    }
+    .file-label:hover { border-color: #4f46e5; color: #4f46e5; }
+    .file-label span { pointer-events: none; }
+    input[type="file"] { display: none; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: #4f46e5;
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: #4338ca; }
+    .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    .btn-success {
+      background: #16a34a;
+      color: #fff;
+      margin-top: 16px;
+    }
+    .btn-success:hover { background: #15803d; }
+
+    .btn-ghost {
+      background: #f3f4f6;
+      color: #374151;
+      margin-top: 10px;
+    }
+    .btn-ghost:hover { background: #e5e7eb; }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #b91c1c;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.9rem;
+      margin-top: 14px;
+      display: none;
+    }
+
+    .results { display: none; margin-top: 24px; }
+
+    .results-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    .summary-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .summary-row .field { margin-bottom: 0; }
+
+    .breakdown-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin-bottom: 4px;
+    }
+    .breakdown-table th {
+      text-align: left;
+      padding: 7px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #888;
+      text-transform: uppercase;
+      border-bottom: 1.5px solid #e5e7eb;
+    }
+    .breakdown-table td {
+      padding: 8px 8px;
+      border-bottom: 1px solid #f0f0f0;
+      color: #333;
+      vertical-align: top;
+    }
+    .breakdown-table tr:last-child td { border-bottom: none; }
+
+    .divider {
+      border: none;
+      border-top: 1.5px solid #f0f0f0;
+      margin: 20px 0;
+    }
+
+    @media (max-width: 400px) {
+      .summary-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Meal Calorie Logger</h1>
+
+  <div class="card">
+    <!-- Input form -->
+    <div id="inputSection">
+      <div class="field">
+        <label for="date">Date</label>
+        <input type="text" id="date" placeholder="MM/DD/YYYY" />
+      </div>
+
+      <div class="field">
+        <label for="mealType">Meal type</label>
+        <select id="mealType">
+          <option value="Breakfast">Breakfast</option>
+          <option value="Lunch">Lunch</option>
+          <option value="Dinner">Dinner</option>
+          <option value="Snacks">Snacks</option>
+          <option value="Protein">Protein</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="description">What did you eat?</label>
+        <textarea id="description" placeholder="e.g. 3 rotis, aloo sabji, 1 bowl dal…"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Photo (optional)</label>
+        <label class="file-label" for="photo">
+          <span id="photoLabel">📷 Choose a photo…</span>
+        </label>
+        <input type="file" id="photo" accept="image/*" />
+      </div>
+
+      <button class="btn btn-primary" id="estimateBtn" onclick="estimate()">
+        <span id="btnText">Estimate nutrition</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+
+      <div class="error-msg" id="errorMsg"></div>
+    </div>
+
+    <!-- Results section -->
+    <div class="results" id="results">
+      <hr class="divider" />
+      <div class="results-title">Estimated nutrition — review &amp; edit</div>
+
+      <div class="field">
+        <label for="rItemSummary">Items</label>
+        <input type="text" id="rItemSummary" />
+      </div>
+
+      <div class="summary-row">
+        <div class="field">
+          <label for="rCalories">Calories (kcal)</label>
+          <input type="number" id="rCalories" min="0" />
+        </div>
+        <div class="field">
+          <label for="rProtein">Protein (g)</label>
+          <input type="number" id="rProtein" min="0" />
+        </div>
+      </div>
+
+      <div class="results-title" style="margin-top:4px;">Breakdown</div>
+      <table class="breakdown-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Qty</th>
+            <th>Cal</th>
+            <th>Prot</th>
+          </tr>
+        </thead>
+        <tbody id="breakdownBody"></tbody>
+      </table>
+
+      <button class="btn btn-success" onclick="openForm()">Open pre-filled form ↗</button>
+      <button class="btn btn-ghost" onclick="reset()">Log another meal</button>
+    </div>
+  </div>
+
+  <script>
+    const FORM_BASE = "https://docs.google.com/forms/d/e/1FAIpQLSedsQl0qrze-gL_Nmn1U4lhWVUIkIkufRK_ECkOPar3bfOnNQ/viewform";
+
+    // Pre-fill today's date
+    (function () {
+      const now = new Date();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const yyyy = now.getFullYear();
+      document.getElementById("date").value = `${mm}/${dd}/${yyyy}`;
+    })();
+
+    // Show filename when photo selected
+    document.getElementById("photo").addEventListener("change", function () {
+      const label = document.getElementById("photoLabel");
+      label.textContent = this.files.length ? `📷 ${this.files[0].name}` : "📷 Choose a photo…";
+    });
+
+    async function estimate() {
+      const text = document.getElementById("description").value.trim();
+      if (!text) {
+        showError("Please describe what you ate.");
+        return;
+      }
+
+      setLoading(true);
+      hideError();
+      hideResults();
+
+      const fd = new FormData();
+      fd.append("text", text);
+      fd.append("meal_type", document.getElementById("mealType").value);
+      const photoFile = document.getElementById("photo").files[0];
+      if (photoFile) fd.append("image", photoFile);
+
+      try {
+        const res = await fetch("/estimate", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          showError(data.error || `Server error ${res.status}`);
+          return;
+        }
+        showResults(data);
+      } catch (err) {
+        showError("Network error — is the server running?");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function showResults(data) {
+      document.getElementById("rItemSummary").value = data.item_summary || "";
+      document.getElementById("rCalories").value = data.calories ?? "";
+      document.getElementById("rProtein").value = data.protein ?? "";
+
+      const tbody = document.getElementById("breakdownBody");
+      tbody.innerHTML = "";
+      (data.breakdown || []).forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${esc(row.item)}</td><td>${esc(row.qty)}</td><td>${row.cal}</td><td>${row.prot}</td>`;
+        tbody.appendChild(tr);
+      });
+
+      document.getElementById("results").style.display = "block";
+    }
+
+    function hideResults() {
+      document.getElementById("results").style.display = "none";
+    }
+
+    function openForm() {
+      const dateParts = document.getElementById("date").value.split("/"); // MM/DD/YYYY
+      const month    = dateParts[0] || "";
+      const day      = dateParts[1] || "";
+      const year     = dateParts[2] || "";
+      const meal     = encodeURIComponent(document.getElementById("mealType").value);
+      const items    = encodeURIComponent(document.getElementById("rItemSummary").value);
+      const calories = encodeURIComponent(document.getElementById("rCalories").value);
+      const protein  = encodeURIComponent(document.getElementById("rProtein").value);
+
+      const url = `${FORM_BASE}?entry.556709106_year=${year}&entry.556709106_month=${month}&entry.556709106_day=${day}&entry.1659704160=${meal}&entry.608133542=${items}&entry.998829307=${calories}&entry.343920601=${protein}&usp=pp_url`;
+      window.open(url, "_blank");
+    }
+
+    function reset() {
+      document.getElementById("description").value = "";
+      document.getElementById("photo").value = "";
+      document.getElementById("photoLabel").textContent = "📷 Choose a photo…";
+      hideError();
+      hideResults();
+      document.getElementById("description").focus();
+    }
+
+    function setLoading(on) {
+      const btn = document.getElementById("estimateBtn");
+      const txt = document.getElementById("btnText");
+      const spin = document.getElementById("spinner");
+      btn.disabled = on;
+      txt.textContent = on ? "Estimating…" : "Estimate nutrition";
+      spin.style.display = on ? "block" : "none";
+    }
+
+    function showError(msg) {
+      const el = document.getElementById("errorMsg");
+      el.textContent = msg;
+      el.style.display = "block";
+    }
+
+    function hideError() {
+      document.getElementById("errorMsg").style.display = "none";
+    }
+
+    function esc(s) {
+      return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+  </script>
+</body>
+</html>
