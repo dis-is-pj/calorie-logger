@@ -106,30 +106,18 @@
     }
     .btn:active { transform: scale(0.98); }
 
-    .btn-primary {
-      background: #4f46e5;
-      color: #fff;
-    }
+    .btn-primary { background: #4f46e5; color: #fff; }
     .btn-primary:hover:not(:disabled) { background: #4338ca; }
     .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
 
-    .btn-success {
-      background: #16a34a;
-      color: #fff;
-      margin-top: 16px;
-    }
+    .btn-success { background: #16a34a; color: #fff; margin-top: 16px; }
     .btn-success:hover { background: #15803d; }
 
-    .btn-ghost {
-      background: #f3f4f6;
-      color: #374151;
-      margin-top: 10px;
-    }
+    .btn-ghost { background: #f3f4f6; color: #374151; margin-top: 10px; }
     .btn-ghost:hover { background: #e5e7eb; }
 
     .spinner {
-      width: 18px;
-      height: 18px;
+      width: 18px; height: 18px;
       border: 2.5px solid rgba(255,255,255,0.4);
       border-top-color: #fff;
       border-radius: 50%;
@@ -160,29 +148,39 @@
       margin-bottom: 14px;
     }
 
-    .summary-row {
+    /* 2×2 macro grid */
+    .macro-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
       margin-bottom: 16px;
     }
+    .macro-cell { display: flex; flex-direction: column; }
+    .macro-cell label { margin-bottom: 5px; }
+    .range-hint {
+      font-size: 0.72rem;
+      color: #9ca3af;
+      margin-top: 5px;
+      line-height: 1.3;
+    }
 
-    .summary-row .field { margin-bottom: 0; }
-
+    /* Breakdown table — scrollable on small screens */
+    .table-wrap { overflow-x: auto; margin-bottom: 4px; }
     .breakdown-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.88rem;
-      margin-bottom: 4px;
+      font-size: 0.85rem;
+      min-width: 340px;
     }
     .breakdown-table th {
       text-align: left;
       padding: 7px 8px;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       font-weight: 700;
       color: #888;
       text-transform: uppercase;
       border-bottom: 1.5px solid #e5e7eb;
+      white-space: nowrap;
     }
     .breakdown-table td {
       padding: 8px 8px;
@@ -192,14 +190,31 @@
     }
     .breakdown-table tr:last-child td { border-bottom: none; }
 
-    .divider {
-      border: none;
-      border-top: 1.5px solid #f0f0f0;
-      margin: 20px 0;
+    /* Explanation box */
+    .explanation-box {
+      background: #f8f7ff;
+      border: 1px solid #e0e7ff;
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 16px;
+      font-size: 0.88rem;
+      color: #374151;
+      line-height: 1.6;
+      display: none;
+    }
+    .explanation-box .exp-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
     }
 
-    @media (max-width: 400px) {
-      .summary-row { grid-template-columns: 1fr; }
+    .divider { border: none; border-top: 1.5px solid #f0f0f0; margin: 20px 0; }
+
+    @media (max-width: 360px) {
+      .macro-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -207,7 +222,6 @@
   <h1>Meal Calorie Logger</h1>
 
   <div class="card">
-    <!-- Input form -->
     <div id="inputSection">
       <div class="field">
         <label for="date">Date</label>
@@ -246,7 +260,7 @@
       <div class="error-msg" id="errorMsg"></div>
     </div>
 
-    <!-- Results section -->
+    <!-- Results -->
     <div class="results" id="results">
       <hr class="divider" />
       <div class="results-title">Estimated nutrition — review &amp; edit</div>
@@ -256,31 +270,56 @@
         <input type="text" id="rItemSummary" />
       </div>
 
-      <div class="summary-row">
-        <div class="field">
+      <div class="macro-grid">
+        <div class="macro-cell">
           <label for="rCalories">Calories (kcal)</label>
           <input type="number" id="rCalories" min="0" />
+          <span class="range-hint" id="rCalRange"></span>
         </div>
-        <div class="field">
+        <div class="macro-cell">
           <label for="rProtein">Protein (g)</label>
           <input type="number" id="rProtein" min="0" />
+          <span class="range-hint" id="rProtRange"></span>
+        </div>
+        <div class="macro-cell">
+          <label for="rCarbs">Carbs (g)</label>
+          <input type="number" id="rCarbs" min="0" />
+          <span class="range-hint" id="rCarbRange"></span>
+        </div>
+        <div class="macro-cell">
+          <label for="rFat">Fat (g)</label>
+          <input type="number" id="rFat" min="0" />
+          <span class="range-hint" id="rFatRange"></span>
         </div>
       </div>
 
-      <div class="results-title" style="margin-top:4px;">Breakdown</div>
-      <table class="breakdown-table">
-        <thead>
-          <tr>
-            <th>Item</th>
-            <th>Qty</th>
-            <th>Cal</th>
-            <th>Prot</th>
-          </tr>
-        </thead>
-        <tbody id="breakdownBody"></tbody>
-      </table>
+      <div class="results-title">Breakdown</div>
+      <div class="table-wrap">
+        <table class="breakdown-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty</th>
+              <th>Cal</th>
+              <th>Prot</th>
+              <th>Carbs</th>
+              <th>Fat</th>
+            </tr>
+          </thead>
+          <tbody id="breakdownBody"></tbody>
+        </table>
+      </div>
+
+      <div class="explanation-box" id="explanationBox">
+        <div class="exp-title">How these numbers were estimated</div>
+        <span id="explanationText"></span>
+      </div>
 
       <button class="btn btn-success" onclick="openForm()">Open pre-filled form ↗</button>
+      <div id="debugUrlWrap" style="margin-top:10px;display:none;">
+        <label style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;">Pre-fill URL (copy to test manually)</label>
+        <input type="text" id="debugUrl" readonly style="font-size:0.72rem;margin-top:4px;color:#555;cursor:text;" onclick="this.select()" />
+      </div>
       <button class="btn btn-ghost" onclick="reset()">Log another meal</button>
     </div>
   </div>
@@ -288,27 +327,21 @@
   <script>
     const FORM_BASE = "https://docs.google.com/forms/d/e/1FAIpQLSedsQl0qrze-gL_Nmn1U4lhWVUIkIkufRK_ECkOPar3bfOnNQ/viewform";
 
-    // Pre-fill today's date
     (function () {
       const now = new Date();
       const mm = String(now.getMonth() + 1).padStart(2, "0");
       const dd = String(now.getDate()).padStart(2, "0");
-      const yyyy = now.getFullYear();
-      document.getElementById("date").value = `${mm}/${dd}/${yyyy}`;
+      document.getElementById("date").value = `${mm}/${dd}/${now.getFullYear()}`;
     })();
 
-    // Show filename when photo selected
     document.getElementById("photo").addEventListener("change", function () {
-      const label = document.getElementById("photoLabel");
-      label.textContent = this.files.length ? `📷 ${this.files[0].name}` : "📷 Choose a photo…";
+      document.getElementById("photoLabel").textContent =
+        this.files.length ? `📷 ${this.files[0].name}` : "📷 Choose a photo…";
     });
 
     async function estimate() {
       const text = document.getElementById("description").value.trim();
-      if (!text) {
-        showError("Please describe what you ate.");
-        return;
-      }
+      if (!text) { showError("Please describe what you ate."); return; }
 
       setLoading(true);
       hideError();
@@ -317,16 +350,13 @@
       const fd = new FormData();
       fd.append("text", text);
       fd.append("meal_type", document.getElementById("mealType").value);
-      const photoFile = document.getElementById("photo").files[0];
-      if (photoFile) fd.append("image", photoFile);
+      const photo = document.getElementById("photo").files[0];
+      if (photo) fd.append("image", photo);
 
       try {
         const res = await fetch("/estimate", { method: "POST", body: fd });
         const data = await res.json();
-        if (!res.ok || data.error) {
-          showError(data.error || `Server error ${res.status}`);
-          return;
-        }
+        if (!res.ok || data.error) { showError(data.error || `Server error ${res.status}`); return; }
         showResults(data);
       } catch (err) {
         showError("Network error — is the server running?");
@@ -337,35 +367,73 @@
 
     function showResults(data) {
       document.getElementById("rItemSummary").value = data.item_summary || "";
-      document.getElementById("rCalories").value = data.calories ?? "";
-      document.getElementById("rProtein").value = data.protein ?? "";
+      document.getElementById("rCalories").value  = data.calories ?? "";
+      document.getElementById("rProtein").value   = data.protein  ?? "";
+      document.getElementById("rCarbs").value     = data.carbs    ?? "";
+      document.getElementById("rFat").value       = data.fat      ?? "";
+
+      const r = data.ranges || {};
+      setRange("rCalRange",  r.calories, "kcal");
+      setRange("rProtRange", r.protein,  "g");
+      setRange("rCarbRange", r.carbs,    "g");
+      setRange("rFatRange",  r.fat,      "g");
 
       const tbody = document.getElementById("breakdownBody");
       tbody.innerHTML = "";
       (data.breakdown || []).forEach(row => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${esc(row.item)}</td><td>${esc(row.qty)}</td><td>${row.cal}</td><td>${row.prot}</td>`;
+        tr.innerHTML = `
+          <td>${esc(row.item)}</td>
+          <td>${esc(row.qty)}</td>
+          <td>${row.cal ?? ""}</td>
+          <td>${row.prot ?? ""}</td>
+          <td>${row.carbs ?? ""}</td>
+          <td>${row.fat ?? ""}</td>`;
         tbody.appendChild(tr);
       });
+
+      const expBox  = document.getElementById("explanationBox");
+      const expText = document.getElementById("explanationText");
+      if (data.explanation) {
+        expText.textContent = data.explanation;
+        expBox.style.display = "block";
+      } else {
+        expBox.style.display = "none";
+      }
 
       document.getElementById("results").style.display = "block";
     }
 
-    function hideResults() {
-      document.getElementById("results").style.display = "none";
+    function setRange(id, range, unit) {
+      const el = document.getElementById(id);
+      if (range && range.min != null && range.max != null) {
+        el.textContent = `range: ${range.min}–${range.max} ${unit}`;
+      } else {
+        el.textContent = "";
+      }
     }
 
-    function openForm() {
-      const dateParts = document.getElementById("date").value.split("/"); // MM/DD/YYYY
-      const month    = dateParts[0] || "";
-      const day      = dateParts[1] || "";
-      const year     = dateParts[2] || "";
-      const meal     = encodeURIComponent(document.getElementById("mealType").value);
-      const items    = encodeURIComponent(document.getElementById("rItemSummary").value);
-      const calories = encodeURIComponent(document.getElementById("rCalories").value);
-      const protein  = encodeURIComponent(document.getElementById("rProtein").value);
+    function hideResults() { document.getElementById("results").style.display = "none"; }
 
-      const url = `${FORM_BASE}?entry.556709106_year=${year}&entry.556709106_month=${month}&entry.556709106_day=${day}&entry.1659704160=${meal}&entry.608133542=${items}&entry.998829307=${calories}&entry.343920601=${protein}&usp=pp_url`;
+    function openForm() {
+      // Google Forms pre-fill: spaces → +, leave other chars alone
+      function enc(val) {
+        return encodeURIComponent(String(val)).replace(/%20/g, "+");
+      }
+      // Date field is <input type="date"> — needs YYYY-MM-DD, not MM/DD/YYYY
+      const rawDate = document.getElementById("date").value;
+      const dp = rawDate.split("/");
+      const isoDate = dp.length === 3 ? `${dp[2]}-${dp[0]}-${dp[1]}` : rawDate;
+
+      const date     = enc(isoDate);
+      const meal     = enc(document.getElementById("mealType").value);
+      const items    = enc(document.getElementById("rItemSummary").value);
+      const calories = enc(document.getElementById("rCalories").value);
+      const protein  = enc(document.getElementById("rProtein").value);
+      const url = `${FORM_BASE}?usp=pp_url&entry.556709106=${date}&entry.1659704160=${meal}&entry.608133542=${items}&entry.998829307=${calories}&entry.343920601=${protein}`;
+
+      document.getElementById("debugUrl").value = url;
+      document.getElementById("debugUrlWrap").style.display = "block";
       window.open(url, "_blank");
     }
 
@@ -379,11 +447,11 @@
     }
 
     function setLoading(on) {
-      const btn = document.getElementById("estimateBtn");
-      const txt = document.getElementById("btnText");
+      const btn  = document.getElementById("estimateBtn");
+      const txt  = document.getElementById("btnText");
       const spin = document.getElementById("spinner");
-      btn.disabled = on;
-      txt.textContent = on ? "Estimating…" : "Estimate nutrition";
+      btn.disabled     = on;
+      txt.textContent  = on ? "Estimating…" : "Estimate nutrition";
       spin.style.display = on ? "block" : "none";
     }
 
@@ -393,9 +461,7 @@
       el.style.display = "block";
     }
 
-    function hideError() {
-      document.getElementById("errorMsg").style.display = "none";
-    }
+    function hideError() { document.getElementById("errorMsg").style.display = "none"; }
 
     function esc(s) {
       return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");

@@ -20,23 +20,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SYSTEM_PROMPT = (
-    "You are a nutrition estimator. The user is from Bhopal, India. "
-    "Home cooking, maid uses moderate oil. Default roti weight = 38g if not mentioned. "
-    "Reply ONLY with a raw JSON object, no markdown, no explanation."
-)
-
-JSON_SCHEMA = """
-{
-  "item_summary": "short comma-separated item list",
-  "calories": 0,
-  "protein": 0,
-  "breakdown": [
-    { "item": "", "qty": "", "cal": 0, "prot": 0 }
-  ]
-}
-"""
-
+with open("system_prompt.txt", encoding="utf-8") as f:
+    SYSTEM_PROMPT = f.read().strip()
 
 
 @app.post("/estimate")
@@ -51,12 +36,6 @@ async def estimate(
 
     client = OpenAI(api_key=api_key)
 
-    user_text = (
-        f"Meal type: {meal_type}\n"
-        f"Description: {text}\n\n"
-        f"Return JSON matching this schema:\n{JSON_SCHEMA}"
-    )
-
     content = []
 
     if image and image.filename:
@@ -68,12 +47,12 @@ async def estimate(
             "image_url": {"url": f"data:{media_type};base64,{b64}", "detail": "low"},
         })
 
-    content.append({"type": "text", "text": user_text})
+    content.append({"type": "text", "text": f"Meal type: {meal_type}\nDescription: {text}"})
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
-            max_tokens=1024,
+            model="gpt-4.1-mini",
+            max_tokens=1500,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
