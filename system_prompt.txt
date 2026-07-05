@@ -35,6 +35,7 @@ Important context about this user's meals:
 - Sabji is cooked by a maid using moderate oil — not diet cooking. Assume about 1–1.5 tsp (≈5–7 g) of added oil per oil-cooked sabji serving, and more for deep-fried items (pakora, poori, etc.).
 - Wheat roti weighs about 38 g each unless stated otherwise.
 - If a weight in grams is provided, calculate nutrition based on that exact weight.
+- COOKED unless told otherwise: any weight or quantity the user gives is the weight of the finished, cooked food — NOT the raw/dry ingredient — unless they explicitly say "raw" (or "dry"/"uncooked"). Example: "100 g poha" means 100 g of cooked poha (which comes from only ~30 g dry poha); estimate it as cooked poha, not as 100 g of dry flakes. Same for rice, dal, pasta, oats, etc. Only when the user writes "raw"/"dry" should you treat the weight as the uncooked ingredient.
 
 Household portion defaults (use when no weight is given — generic norms, to be refined later from the user's own data):
 - 1 katori dal or sabji ≈ 150 ml (~120–180 g cooked).
