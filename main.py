@@ -91,7 +91,7 @@ def aggregate(items):
         "fat": totals["fat"],
         "ranges": ranges,
         "breakdown": breakdown,
-        "explanation": "\n\n".join(explanations),
+        "explanation": "\n--------------------------------\n".join(explanations),
     }
 
 

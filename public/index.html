@@ -210,6 +210,10 @@
       letter-spacing: 0.5px;
       margin-bottom: 6px;
     }
+    .explanation-box #explanationText {
+      display: block;
+      white-space: pre-wrap;
+    }
 
     .divider { border: none; border-top: 1.5px solid #f0f0f0; margin: 20px 0; }
 
@@ -395,7 +399,7 @@
       const expBox  = document.getElementById("explanationBox");
       const expText = document.getElementById("explanationText");
       if (data.explanation) {
-        expText.textContent = data.explanation;
+        expText.innerHTML = esc(data.explanation).replace(/\n/g, "<br>");
         expBox.style.display = "block";
       } else {
         expBox.style.display = "none";

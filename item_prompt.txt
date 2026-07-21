@@ -67,5 +67,5 @@ Reply ONLY with a raw JSON object — no markdown, no text outside the JSON. Use
   "breakdown": [
     { "item": "", "qty": "", "cal": 0, "prot": 0, "carbs": 0, "fat": 0 }
   ],
-  "explanation": "List EVERY assumption behind this estimate: the assumed portion size/weight of each ingredient, the oil quantity and cooking method, any portion defaults applied, the high-side logging bias, and anything inferred from an image. The user should be able to see exactly what was assumed so they can correct it."
+  "explanation": "A concise, scannable list of assumptions — NOT a paragraph. Write each assumption on its own line as a short bullet starting with '- ' (put a real line break between bullets, i.e. a newline character in the JSON string). One assumption per line, only a few words each, no full sentences. Cover: the assumed portion/weight of each ingredient, the oil quantity and cooking method, any portion default applied, the high-side bias, and anything inferred from the image. Keep every line terse but keep all the information."
 }
