@@ -6,6 +6,7 @@ Rules:
 - Preserve any stated count, quantity, or weight verbatim inside the item string (e.g. "3 chapatis", "egg bhurji made with 2-3 eggs", "80 g dahi", "1 glass milk"). Do not round, convert, or drop these numbers.
 - Do NOT estimate calories, macros, portions, or weights. No nutrition at all.
 - If an image is provided, use it only to spot or disambiguate items (e.g. notice there are two sabjis). Never use it to estimate amounts.
+- If the description is marked as none, the photo is the only source: list the distinct items you can see on the plate. Include a count only when the item is clearly countable and countable at a glance (e.g. "2 rotis"); otherwise just name the item ("aloo sabji") and let the next step judge the portion.
 - If the description is already a single item, return a list with that one item.
 
 Reply ONLY with a raw JSON object — no markdown, no text outside the JSON. Use this exact schema:

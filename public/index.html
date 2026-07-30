@@ -73,22 +73,93 @@
 
     textarea { resize: vertical; min-height: 90px; line-height: 1.5; }
 
-    .file-label {
+    input[type="file"] { display: none; }
+
+    /* Photo capture — two chips, live camera, attached preview */
+    .photo-actions { display: flex; gap: 10px; }
+    .btn-chip {
+      flex: 1;
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 11px 14px;
+      justify-content: center;
+      gap: 7px;
+      padding: 11px 12px;
       border: 1.5px dashed #ccc;
       border-radius: 10px;
       cursor: pointer;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
+      font-family: inherit;
       color: #666;
       background: #fafafa;
-      transition: border-color 0.15s;
+      transition: border-color 0.15s, color 0.15s;
     }
-    .file-label:hover { border-color: #4f46e5; color: #4f46e5; }
-    .file-label span { pointer-events: none; }
-    input[type="file"] { display: none; }
+    .btn-chip:hover { border-color: #4f46e5; color: #4f46e5; }
+    .btn-chip:active { transform: scale(0.98); }
+
+    .camera-wrap { display: none; margin-top: 4px; }
+    .camera-wrap video {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+      border-radius: 12px;
+      background: #000;
+      display: block;
+    }
+    .camera-controls { display: flex; gap: 10px; margin-top: 10px; }
+    .camera-controls .btn-chip { border-style: solid; }
+    .btn-chip.primary {
+      border-color: #4f46e5;
+      background: #4f46e5;
+      color: #fff;
+      font-weight: 600;
+    }
+    .btn-chip.primary:hover { background: #4338ca; border-color: #4338ca; color: #fff; }
+
+    .photo-preview { display: none; margin-top: 4px; }
+    .photo-preview img {
+      width: 100%;
+      max-height: 220px;
+      object-fit: cover;
+      border-radius: 12px;
+      display: block;
+      background: #eee;
+    }
+    .preview-meta {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .link-btn {
+      border: none;
+      background: none;
+      padding: 0;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #4f46e5;
+      cursor: pointer;
+    }
+    .link-btn:hover { text-decoration: underline; }
+    .link-btn.danger { color: #b91c1c; }
+
+    .camera-note {
+      display: none;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      margin-top: 8px;
+      padding: 9px 11px;
+      border-radius: 8px;
+    }
+    .camera-note.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .camera-note.err  { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+
+    .field-hint {
+      font-size: 0.76rem;
+      color: #9ca3af;
+      line-height: 1.4;
+      margin-top: 6px;
+    }
 
     .btn {
       display: flex;
@@ -246,14 +317,36 @@
       <div class="field">
         <label for="description">What did you eat?</label>
         <textarea id="description" placeholder="e.g. 3 rotis, aloo sabji, 1 bowl dal…"></textarea>
+        <div class="field-hint">A photo alone works, but a few words — counts, weights, how it was cooked — give a noticeably better estimate.</div>
       </div>
 
       <div class="field">
         <label>Photo (optional)</label>
-        <label class="file-label" for="photo">
-          <span id="photoLabel">📷 Choose a photo…</span>
-        </label>
+
+        <div class="photo-actions" id="photoActions">
+          <button type="button" class="btn-chip" onclick="openCamera()">📷 Take photo</button>
+          <button type="button" class="btn-chip" onclick="pickPhoto()">🖼️ Upload</button>
+        </div>
         <input type="file" id="photo" accept="image/*" />
+
+        <div class="camera-wrap" id="cameraWrap">
+          <video id="cameraVideo" playsinline autoplay muted></video>
+          <div class="camera-controls">
+            <button type="button" class="btn-chip primary" onclick="shoot()">Capture</button>
+            <button type="button" class="btn-chip" onclick="flipCamera()">⟲ Flip</button>
+            <button type="button" class="btn-chip" onclick="closeCamera()">Cancel</button>
+          </div>
+        </div>
+
+        <div class="photo-preview" id="photoPreview">
+          <img id="previewImg" alt="Attached food photo" />
+          <div class="preview-meta">
+            <button type="button" class="link-btn" onclick="openCamera()">Retake</button>
+            <button type="button" class="link-btn danger" onclick="clearPhoto()">Remove</button>
+          </div>
+        </div>
+
+        <div class="camera-note" id="cameraNote"></div>
       </div>
 
       <button class="btn btn-primary" id="estimateBtn" onclick="estimate()">
@@ -338,14 +431,140 @@
       document.getElementById("date").value = `${mm}/${dd}/${now.getFullYear()}`;
     })();
 
+    // ---- Photo: in-page camera capture + gallery upload -------------------
+    // The camera path never touches the OS camera app, so the shot is never
+    // written to the device's gallery — it lives only as a Blob in this tab.
+
+    let attachedFile = null;   // File (upload) or Blob (capture)
+    let attachedName = "";
+    let previewUrl = null;
+    let stream = null;
+    let facing = "environment";
+
+    function pickPhoto() {
+      hideNote();
+      document.getElementById("photo").click();
+    }
+
+    async function openCamera() {
+      hideNote();
+
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        showNote(
+          "Camera needs a secure connection (https:// or localhost). " +
+          "Over a plain http:// address the browser blocks it — use Upload instead.",
+          "err"
+        );
+        return;
+      }
+
+      closeCamera();
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: facing } },
+          audio: false,
+        });
+      } catch (err) {
+        const msg = {
+          NotAllowedError: "Camera permission denied. Allow it in your browser's site settings, or use Upload.",
+          NotFoundError: "No camera found on this device — use Upload instead.",
+          NotReadableError: "The camera is already in use by another app. Close it and try again.",
+        }[err.name] || `Couldn't start the camera (${err.name}). Use Upload instead.`;
+        showNote(msg, "err");
+        return;
+      }
+
+      const video = document.getElementById("cameraVideo");
+      video.srcObject = stream;
+      document.getElementById("cameraWrap").style.display = "block";
+      document.getElementById("photoActions").style.display = "none";
+      document.getElementById("photoPreview").style.display = "none";
+    }
+
+    function shoot() {
+      const video = document.getElementById("cameraVideo");
+      // Capture at the stream's native resolution — no downscaling, so the
+      // image matches what an uploaded photo would look like.
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (!w || !h) { showNote("Camera is still starting — try again in a moment.", "warn"); return; }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(video, 0, 0, w, h);
+
+      canvas.toBlob(blob => {
+        if (!blob) { showNote("Capture failed — try again, or use Upload.", "err"); return; }
+        closeCamera();
+        setAttached(blob, "capture.jpg");
+      }, "image/jpeg", 0.92);
+    }
+
+    function flipCamera() {
+      facing = facing === "environment" ? "user" : "environment";
+      openCamera();
+    }
+
+    function closeCamera() {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      const video = document.getElementById("cameraVideo");
+      video.srcObject = null;
+      document.getElementById("cameraWrap").style.display = "none";
+      document.getElementById("photoActions").style.display = attachedFile ? "none" : "flex";
+      document.getElementById("photoPreview").style.display = attachedFile ? "block" : "none";
+    }
+
+    // Gallery uploads pass through untouched — the raw File goes to the server.
     document.getElementById("photo").addEventListener("change", function () {
-      document.getElementById("photoLabel").textContent =
-        this.files.length ? `📷 ${this.files[0].name}` : "📷 Choose a photo…";
+      if (this.files.length) setAttached(this.files[0], this.files[0].name);
+    });
+
+    function setAttached(fileOrBlob, name) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      attachedFile = fileOrBlob;
+      attachedName = name;
+      previewUrl = URL.createObjectURL(fileOrBlob);
+
+      document.getElementById("previewImg").src = previewUrl;
+      document.getElementById("photoPreview").style.display = "block";
+      document.getElementById("photoActions").style.display = "none";
+      hideNote();
+    }
+
+    function clearPhoto() {
+      if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+      attachedFile = null;
+      attachedName = "";
+      document.getElementById("previewImg").removeAttribute("src");
+      document.getElementById("photoPreview").style.display = "none";
+      document.getElementById("photoActions").style.display = "flex";
+      // Reset so re-picking the same file still fires `change`.
+      document.getElementById("photo").value = "";
+      hideNote();
+    }
+
+    function showNote(msg, kind) {
+      const el = document.getElementById("cameraNote");
+      el.textContent = msg;
+      el.className = `camera-note ${kind}`;
+      el.style.display = "block";
+    }
+
+    function hideNote() { document.getElementById("cameraNote").style.display = "none"; }
+
+    // Don't leave the camera running when the tab is hidden or unloaded.
+    window.addEventListener("pagehide", closeCamera);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") closeCamera();
     });
 
     async function estimate() {
       const text = document.getElementById("description").value.trim();
-      if (!text) { showError("Please describe what you ate."); return; }
+      if (!text && !attachedFile) { showError("Add a description or a photo."); return; }
 
       setLoading(true);
       hideError();
@@ -354,8 +573,12 @@
       const fd = new FormData();
       fd.append("text", text);
       fd.append("meal_type", document.getElementById("mealType").value);
-      const photo = document.getElementById("photo").files[0];
-      if (photo) fd.append("image", photo);
+      if (attachedFile) {
+        // The filename matters: the server only reads the image if it has one.
+        fd.append("image", attachedFile, attachedName || "photo.jpg");
+        if (!text) showNote("Photo only — a few words would give a better estimate.", "warn");
+        else hideNote();
+      }
 
       try {
         const res = await fetch("/estimate", { method: "POST", body: fd });
@@ -443,8 +666,8 @@
 
     function reset() {
       document.getElementById("description").value = "";
-      document.getElementById("photo").value = "";
-      document.getElementById("photoLabel").textContent = "📷 Choose a photo…";
+      closeCamera();
+      clearPhoto();
       hideError();
       hideResults();
       document.getElementById("description").focus();

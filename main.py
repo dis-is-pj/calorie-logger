@@ -97,10 +97,15 @@ def aggregate(items):
 
 @app.post("/estimate")
 async def estimate(
-    text: str = Form(...),
+    text: str = Form(""),
     meal_type: str = Form(...),
     image: UploadFile = File(None),
 ):
+    text = (text or "").strip()
+    has_image = bool(image and image.filename)
+    if not text and not has_image:
+        return JSONResponse({"error": "Provide a description or a photo."}, status_code=400)
+
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         return JSONResponse({"error": "OPENAI_API_KEY not set"}, status_code=500)
@@ -109,7 +114,7 @@ async def estimate(
 
     # Build the image content block once so it can be reused across all item calls.
     image_block = None
-    if image and image.filename:
+    if has_image:
         raw = await image.read()
         b64 = base64.standard_b64encode(raw).decode("utf-8")
         media_type = image.content_type or "image/jpeg"
@@ -122,7 +127,8 @@ async def estimate(
     split_content = []
     if image_block:
         split_content.append(image_block)
-    split_content.append({"type": "text", "text": f"Meal type: {meal_type}\nDescription: {text}"})
+    description = text or "(none — identify the items from the photo)"
+    split_content.append({"type": "text", "text": f"Meal type: {meal_type}\nDescription: {description}"})
 
     try:
         split_resp = await client.chat.completions.create(
@@ -141,7 +147,7 @@ async def estimate(
     items = [i for i in items if isinstance(i, str) and i.strip()]
     if not items:
         # Fall back to treating the whole description as one item.
-        items = [text]
+        items = [text] if text else ["the meal shown in the photo"]
 
     # --- Stage 2: estimate each item in its own call, concurrently ---
     async def estimate_item(item_text):
