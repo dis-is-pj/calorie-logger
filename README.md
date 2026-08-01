@@ -1,15 +1,27 @@
 # Meal Calorie Logger
 
-A personal tool to estimate calories and protein from a meal description (and optional photo), then log it to a Google Sheet via a pre-filled Google Form.
+A personal tool to estimate calories and protein from a meal description (and optional photo), then log it to a Google Sheet via a Google Form.
 
 ## How it works
+
+Two modes, chosen with the toggle at the top of the page.
+
+**🤖 AI estimate** — when you don't know the numbers:
 
 1. Describe what you ate + pick meal type (Breakfast / Lunch / Dinner / Snacks / Protein)
 2. Optionally attach a photo — snap one in the page with **Take photo**, or pick an existing one with **Upload**
 3. A two-stage estimate: `gpt-4.1-nano` splits the meal into separate items, then `gpt-4.1-mini` estimates each item independently and the results are summed
-4. Review and edit the values, then click **Open pre-filled form** to log to Google Sheets
+4. Review and edit the values, then click **Log this meal**
 
 A photo on its own is enough to submit, but a short description makes the estimate noticeably better.
+
+**✍️ Enter manually** — when you already know them (packaged food, a repeat meal, a shake): type the item, calories and protein and log it directly. No model call, no cost.
+
+### Logging
+
+**Log this meal** posts to `/log`, which submits the Google Form server-side — nothing opens in a new tab and the page reports whether the row actually landed. If that fails, the page offers the old pre-filled-form-in-a-new-tab link as a fallback so a log is never lost.
+
+The form has five questions — Date, Meal, Item, Calories, Protein — so carbs and fat are shown for reference but not stored.
 
 ### About the camera
 

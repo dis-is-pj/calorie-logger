@@ -208,6 +208,19 @@
       display: none;
     }
 
+    .mode-toggle { display: flex; gap: 10px; margin-bottom: 18px; }
+
+    /* Shown in place of the whole card body once a meal is logged. */
+    .logged-box { display: none; text-align: center; padding: 8px 0 4px; }
+    .logged-box .tick { font-size: 2rem; line-height: 1; }
+    .logged-box .headline {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #16a34a;
+      margin: 10px 0 4px;
+    }
+    .logged-box .detail { font-size: 0.88rem; color: #666; margin-bottom: 20px; }
+
     .results { display: none; margin-top: 24px; }
 
     .results-title {
@@ -298,6 +311,11 @@
 
   <div class="card">
     <div id="inputSection">
+      <div class="mode-toggle">
+        <button type="button" class="btn-chip primary" id="modeAiBtn" onclick="setMode('ai')">🤖 AI estimate</button>
+        <button type="button" class="btn-chip" id="modeManualBtn" onclick="setMode('manual')">✍️ Enter manually</button>
+      </div>
+
       <div class="field">
         <label for="date">Date</label>
         <input type="text" id="date" placeholder="MM/DD/YYYY" />
@@ -314,6 +332,7 @@
         </select>
       </div>
 
+      <div id="aiInputs">
       <div class="field">
         <label for="description">What did you eat?</label>
         <textarea id="description" placeholder="e.g. 3 rotis, aloo sabji, 1 bowl dal…"></textarea>
@@ -353,8 +372,47 @@
         <span id="btnText">Estimate nutrition</span>
         <div class="spinner" id="spinner"></div>
       </button>
+      </div><!-- /#aiInputs -->
+
+      <div id="manualInputs" style="display:none">
+        <div class="field">
+          <label for="mItem">Item</label>
+          <input type="text" id="mItem" placeholder="e.g. whey shake, 2 boiled eggs" />
+          <div class="field-hint">Only Item, Calories and Protein are stored — those are the fields the sheet has.</div>
+        </div>
+
+        <div class="macro-grid">
+          <div class="macro-cell">
+            <label for="mCalories">Calories (kcal)</label>
+            <input type="number" id="mCalories" min="0" />
+          </div>
+          <div class="macro-cell">
+            <label for="mProtein">Protein (g)</label>
+            <input type="number" id="mProtein" min="0" />
+          </div>
+        </div>
+
+        <button class="btn btn-success" id="manualLogBtn" onclick="logMeal('manual')">Log this meal</button>
+      </div><!-- /#manualInputs -->
 
       <div class="error-msg" id="errorMsg"></div>
+
+      <!-- Only revealed when the direct submit fails, so a log is never lost. -->
+      <div id="fallbackWrap" style="display:none;margin-top:12px;text-align:center;">
+        <button type="button" class="link-btn" onclick="openFormFallback()">Open the pre-filled form in a new tab instead ↗</button>
+        <div id="debugUrlWrap" style="margin-top:10px;display:none;text-align:left;">
+          <label style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;">Pre-fill URL (copy to test manually)</label>
+          <input type="text" id="debugUrl" readonly style="font-size:0.72rem;margin-top:4px;color:#555;cursor:text;" onclick="this.select()" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation shown after a successful log -->
+    <div class="logged-box" id="loggedBox">
+      <div class="tick">✅</div>
+      <div class="headline">Logged</div>
+      <div class="detail" id="loggedDetail"></div>
+      <button class="btn btn-primary" onclick="reset()">Log another meal</button>
     </div>
 
     <!-- Results -->
@@ -412,12 +470,8 @@
         <span id="explanationText"></span>
       </div>
 
-      <button class="btn btn-success" onclick="openForm()">Open pre-filled form ↗</button>
-      <div id="debugUrlWrap" style="margin-top:10px;display:none;">
-        <label style="font-size:0.72rem;color:#9ca3af;text-transform:uppercase;letter-spacing:.4px;">Pre-fill URL (copy to test manually)</label>
-        <input type="text" id="debugUrl" readonly style="font-size:0.72rem;margin-top:4px;color:#555;cursor:text;" onclick="this.select()" />
-      </div>
-      <button class="btn btn-ghost" onclick="reset()">Log another meal</button>
+      <button class="btn btn-success" id="aiLogBtn" onclick="logMeal('ai')">Log this meal</button>
+      <button class="btn btn-ghost" onclick="reset()">Start over</button>
     </div>
   </div>
 
@@ -568,6 +622,7 @@
 
       setLoading(true);
       hideError();
+      hideFallback();
       hideResults();
 
       const fd = new FormData();
@@ -642,21 +697,124 @@
 
     function hideResults() { document.getElementById("results").style.display = "none"; }
 
-    function openForm() {
+    // ---- Logging ----------------------------------------------------------
+    // The meal is posted to /log, which submits the Google Form server-side. The
+    // pre-fill-URL-in-a-new-tab path survives only as a fallback when that fails.
+
+    function setMode(mode) {
+      const manual = mode === "manual";
+      document.getElementById("aiInputs").style.display     = manual ? "none" : "block";
+      document.getElementById("manualInputs").style.display = manual ? "block" : "none";
+      document.getElementById("modeAiBtn").classList.toggle("primary", !manual);
+      document.getElementById("modeManualBtn").classList.toggle("primary", manual);
+      hideError();
+      hideFallback();
+      if (manual) {
+        closeCamera();
+        hideResults();
+        document.getElementById("mItem").focus();
+      }
+    }
+
+    // Date field is a text input holding MM/DD/YYYY; everything downstream wants ISO.
+    function getIsoDate() {
+      const raw = document.getElementById("date").value;
+      const dp = raw.split("/");
+      return dp.length === 3 ? `${dp[2]}-${dp[0]}-${dp[1]}` : raw;
+    }
+
+    function isManualMode() {
+      return document.getElementById("manualInputs").style.display !== "none";
+    }
+
+    function currentEntry() {
+      return isManualMode()
+        ? {
+            item:     document.getElementById("mItem").value.trim(),
+            calories: document.getElementById("mCalories").value.trim(),
+            protein:  document.getElementById("mProtein").value.trim(),
+          }
+        : {
+            item:     document.getElementById("rItemSummary").value.trim(),
+            calories: document.getElementById("rCalories").value.trim(),
+            protein:  document.getElementById("rProtein").value.trim(),
+          };
+    }
+
+    async function logMeal(source) {
+      const btn = document.getElementById(source === "manual" ? "manualLogBtn" : "aiLogBtn");
+      const entry = currentEntry();
+
+      if (entry.calories === "" || entry.protein === "") {
+        showError("Calories and protein are both required.");
+        return;
+      }
+
+      hideError();
+      hideFallback();
+      btn.disabled = true;
+      btn.textContent = "Logging…";
+
+      const mealType = document.getElementById("mealType").value;
+
+      const fd = new FormData();
+      fd.append("date", getIsoDate());
+      fd.append("meal_type", mealType);
+      fd.append("item", entry.item);
+      fd.append("calories", entry.calories);
+      fd.append("protein", entry.protein);
+
+      try {
+        const res = await fetch("/log", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          showError(data.error || `Server error ${res.status}`);
+          showFallback();
+          return;
+        }
+        showLogged(mealType, entry);
+      } catch (err) {
+        showError("Network error — the meal was not logged.");
+        showFallback();
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Log this meal";
+      }
+    }
+
+    function showLogged(mealType, entry) {
+      const bits = [mealType];
+      if (entry.item) bits.push(entry.item);
+      bits.push(`${entry.calories} kcal`, `${entry.protein} g protein`);
+      document.getElementById("loggedDetail").textContent = bits.join(" · ");
+      document.getElementById("inputSection").style.display = "none";
+      hideResults();
+      document.getElementById("loggedBox").style.display = "block";
+    }
+
+    function showFallback() {
+      const el = document.getElementById("fallbackWrap");
+      el.style.display = "block";
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function hideFallback() {
+      document.getElementById("fallbackWrap").style.display = "none";
+      document.getElementById("debugUrlWrap").style.display = "none";
+    }
+
+    // Last resort: the original pre-filled-form-in-a-new-tab behaviour.
+    function openFormFallback() {
       // Google Forms pre-fill: spaces → +, leave other chars alone
       function enc(val) {
         return encodeURIComponent(String(val)).replace(/%20/g, "+");
       }
-      // Date field is <input type="date"> — needs YYYY-MM-DD, not MM/DD/YYYY
-      const rawDate = document.getElementById("date").value;
-      const dp = rawDate.split("/");
-      const isoDate = dp.length === 3 ? `${dp[2]}-${dp[0]}-${dp[1]}` : rawDate;
-
-      const date     = enc(isoDate);
+      const entry = currentEntry();
+      const date     = enc(getIsoDate());
       const meal     = enc(document.getElementById("mealType").value);
-      const items    = enc(document.getElementById("rItemSummary").value);
-      const calories = enc(document.getElementById("rCalories").value);
-      const protein  = enc(document.getElementById("rProtein").value);
+      const items    = enc(entry.item);
+      const calories = enc(entry.calories);
+      const protein  = enc(entry.protein);
       const url = `${FORM_BASE}?usp=pp_url&entry.556709106=${date}&entry.1659704160=${meal}&entry.608133542=${items}&entry.998829307=${calories}&entry.343920601=${protein}`;
 
       document.getElementById("debugUrl").value = url;
@@ -666,11 +824,17 @@
 
     function reset() {
       document.getElementById("description").value = "";
+      document.getElementById("mItem").value = "";
+      document.getElementById("mCalories").value = "";
+      document.getElementById("mProtein").value = "";
       closeCamera();
       clearPhoto();
       hideError();
+      hideFallback();
       hideResults();
-      document.getElementById("description").focus();
+      document.getElementById("loggedBox").style.display = "none";
+      document.getElementById("inputSection").style.display = "block";
+      document.getElementById(isManualMode() ? "mItem" : "description").focus();
     }
 
     function setLoading(on) {
