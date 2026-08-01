@@ -2,7 +2,9 @@ import asyncio
 import base64
 import json
 import os
+from datetime import datetime
 
+import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +28,19 @@ SPLITTER_MODEL = "gpt-4.1-nano"
 ITEM_MODEL = "gpt-4.1-mini"
 
 MACROS = ("calories", "protein", "carbs", "fat")
+
+# The Google Form the log is written to. /formResponse is the POST endpoint behind
+# the form's own Submit button, so posting to it directly records a real response.
+FORM_ID = "1FAIpQLSedsQl0qrze-gL_Nmn1U4lhWVUIkIkufRK_ECkOPar3bfOnNQ"
+FORM_POST_URL = f"https://docs.google.com/forms/d/e/{FORM_ID}/formResponse"
+
+ENTRY_DATE = "entry.556709106"
+ENTRY_MEAL = "entry.1659704160"
+ENTRY_ITEM = "entry.608133542"
+ENTRY_CALORIES = "entry.998829307"
+ENTRY_PROTEIN = "entry.343920601"
+
+MEAL_TYPES = ("Breakfast", "Lunch", "Dinner", "Snacks", "Protein")
 
 
 def _load_prompt(filename):
@@ -179,6 +194,67 @@ async def estimate(
 
     # --- Stage 3: sum natively and return the existing response contract ---
     return JSONResponse(aggregate(results))
+
+
+@app.post("/log")
+async def log(
+    date: str = Form(...),  # ISO "YYYY-MM-DD"
+    meal_type: str = Form(...),
+    item: str = Form(""),
+    calories: str = Form(...),
+    protein: str = Form(...),
+):
+    try:
+        day = datetime.strptime(date.strip(), "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"error": f"Bad date: {date!r} (expected YYYY-MM-DD)"}, status_code=400)
+
+    meal_type = (meal_type or "").strip()
+    if meal_type not in MEAL_TYPES:
+        return JSONResponse({"error": f"Unknown meal type: {meal_type!r}"}, status_code=400)
+
+    for label, raw in (("Calories", calories), ("Protein", protein)):
+        try:
+            float((raw or "").strip())
+        except ValueError:
+            return JSONResponse({"error": f"{label} must be a number."}, status_code=400)
+
+    # A date question posts as three separate params — the YYYY-MM-DD form the
+    # pre-fill URL uses is not accepted here. The trailing fields are what the
+    # form's own page submits alongside the answers.
+    payload = {
+        f"{ENTRY_DATE}_year": day.year,
+        f"{ENTRY_DATE}_month": day.month,
+        f"{ENTRY_DATE}_day": day.day,
+        ENTRY_MEAL: meal_type,
+        ENTRY_ITEM: (item or "").strip(),
+        ENTRY_CALORIES: calories.strip(),
+        ENTRY_PROTEIN: protein.strip(),
+        "fvv": "1",
+        "pageHistory": "0",
+        "submissionTimestamp": "-1",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.post(FORM_POST_URL, data=payload)
+    except httpx.HTTPError as e:
+        return JSONResponse({"error": f"Could not reach Google Forms: {e}"}, status_code=502)
+
+    if resp.status_code != 200:
+        return JSONResponse(
+            {"error": f"Google Forms returned {resp.status_code}."}, status_code=502
+        )
+
+    # Google answers 200 either way: the confirmation page on success, or the form
+    # re-rendered with errors on rejection. The form element only exists in the latter.
+    if 'id="mG61Hd"' in resp.text or "FormviewerViewNavigationSubmitButton" in resp.text:
+        return JSONResponse(
+            {"error": "Google rejected the submission — use the manual form link below."},
+            status_code=502,
+        )
+
+    return JSONResponse({"ok": True})
 
 
 app.mount("/", StaticFiles(directory="public", html=True), name="static")
