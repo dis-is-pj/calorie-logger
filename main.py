@@ -66,8 +66,16 @@ def _range(value):
     return {"min": _num(value.get("min")), "max": _num(value.get("max"))}
 
 
+BREAKDOWN_KEYS = {"calories": "cal", "protein": "prot", "carbs": "carbs", "fat": "fat"}
+
+
 def aggregate(items):
-    """Sum per-item estimates into the top-level response the frontend expects."""
+    """Sum per-item estimates into the top-level response the frontend expects.
+
+    Item totals are recomputed here from each item's breakdown rows rather than
+    trusted from the LLM's own top-level fields — the model's arithmetic isn't
+    reliable enough, so Python does all the summing.
+    """
     totals = {m: 0 for m in MACROS}
     ranges = {m: {"min": 0, "max": 0} for m in MACROS}
     breakdown = []
@@ -75,21 +83,27 @@ def aggregate(items):
     explanations = []
 
     for est in items:
-        for m in MACROS:
-            totals[m] += _num(est.get(m))
-            r = _range((est.get("ranges") or {}).get(m))
-            ranges[m]["min"] += r["min"]
-            ranges[m]["max"] += r["max"]
-
-        for row in est.get("breakdown") or []:
-            breakdown.append({
+        rows = [
+            {
                 "item": row.get("item", ""),
                 "qty": row.get("qty", ""),
                 "cal": _num(row.get("cal")),
                 "prot": _num(row.get("prot")),
                 "carbs": _num(row.get("carbs")),
                 "fat": _num(row.get("fat")),
-            })
+            }
+            for row in est.get("breakdown") or []
+        ]
+        breakdown.extend(rows)
+
+        for m in MACROS:
+            key = BREAKDOWN_KEYS[m]
+            item_total = sum(row[key] for row in rows) if rows else _num(est.get(m))
+            totals[m] += item_total
+
+            r = _range((est.get("ranges") or {}).get(m))
+            ranges[m]["min"] += r["min"]
+            ranges[m]["max"] += r["max"]
 
         name = est.get("item_summary") or ""
         if name:
