@@ -25,7 +25,7 @@ app.add_middleware(
 
 # Small/cheap model just isolates the items; the accurate model estimates each one.
 SPLITTER_MODEL = "gpt-6-luna"
-ITEM_MODEL = "gpt-4.1-mini"
+ITEM_MODEL = "gpt-6.1-sol"
 
 MACROS = ("calories", "protein", "carbs", "fat")
 
@@ -187,7 +187,7 @@ async def estimate(
         item_content.append({"type": "text", "text": f"Meal type: {meal_type}\nItem: {item_text}"})
         resp = await client.chat.completions.create(
             model=ITEM_MODEL,
-            max_tokens=700,
+            max_completion_tokens=2000,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": ITEM_PROMPT},
