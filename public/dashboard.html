@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Meal Calorie Logger</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    .top-row {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 700; color: #111; letter-spacing: -0.3px; }
+
+    a.back-link {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #4f46e5;
+      text-decoration: none;
+    }
+    a.back-link:hover { text-decoration: underline; }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 460px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    .stat-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+    .stat-box {
+      flex: 1;
+      background: #f8f7ff;
+      border: 1px solid #e0e7ff;
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-box .num { font-size: 1.5rem; font-weight: 700; color: #1a1a1a; }
+    .stat-box .label { font-size: 0.72rem; color: #6b7280; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+
+    .log-list { margin-top: 16px; }
+    .log-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 0.88rem;
+    }
+    .log-row:last-child { border-bottom: none; }
+    .log-row .meta { color: #333; }
+    .log-row .meta .meal-type {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      display: block;
+      margin-bottom: 2px;
+    }
+    .log-row .nums { color: #666; white-space: nowrap; text-align: right; }
+
+    .empty-note { color: #9ca3af; font-size: 0.88rem; text-align: center; padding: 12px 0; }
+
+    .error-note {
+      background: #fef2f2;
+      border: 1px solid #fca5a5;
+      color: #b91c1c;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 0.88rem;
+      width: 100%;
+      max-width: 460px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-row">
+    <h1>Dashboard</h1>
+    <a class="back-link" href="/">← Back to logger</a>
+  </div>
+
+  <div class="error-note" id="errorNote"></div>
+
+  <div class="card">
+    <div class="section-title">Today</div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="num" id="todayCalories">—</div>
+        <div class="label">kcal</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="todayProtein">—</div>
+        <div class="label">g protein</div>
+      </div>
+    </div>
+    <div class="log-list" id="todayLogList"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Last 7 days average</div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="num" id="avgCalories">—</div>
+        <div class="label">kcal / day</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="avgProtein">—</div>
+        <div class="label">g protein / day</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function esc(s) {
+      return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function todayIso() {
+      const now = new Date();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      return `${now.getFullYear()}-${mm}-${dd}`;
+    }
+
+    function renderLogList(logs) {
+      const el = document.getElementById("todayLogList");
+      if (!logs.length) {
+        el.innerHTML = '<div class="empty-note">Nothing logged yet today.</div>';
+        return;
+      }
+      el.innerHTML = logs.map(log => `
+        <div class="log-row">
+          <div class="meta">
+            <span class="meal-type">${esc(log.meal_type)}</span>
+            ${esc(log.item) || "—"}
+          </div>
+          <div class="nums">${log.calories} kcal · ${log.protein} g</div>
+        </div>
+      `).join("");
+    }
+
+    async function loadDashboard() {
+      try {
+        const res = await fetch(`/dashboard?date=${encodeURIComponent(todayIso())}`);
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          throw new Error(data.error || `Server error ${res.status}`);
+        }
+
+        document.getElementById("todayCalories").textContent = data.today.calories;
+        document.getElementById("todayProtein").textContent = data.today.protein;
+        renderLogList(data.today.logs);
+
+        document.getElementById("avgCalories").textContent = data.last_7_days.calories_avg;
+        document.getElementById("avgProtein").textContent = data.last_7_days.protein_avg;
+      } catch (err) {
+        const el = document.getElementById("errorNote");
+        el.textContent = `Could not load dashboard: ${err.message}`;
+        el.style.display = "block";
+      }
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>
