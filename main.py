@@ -10,6 +10,8 @@ from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from openai import AsyncOpenAI
 
 load_dotenv()
@@ -41,6 +43,17 @@ ENTRY_CALORIES = "entry.998829307"
 ENTRY_PROTEIN = "entry.343920601"
 
 MEAL_TYPES = ("Breakfast", "Lunch", "Dinner", "Snacks", "Protein")
+
+# Lazy singleton: created on first use so a missing/broken Firestore setup
+# surfaces as a per-request error instead of crashing the whole app at import.
+_firestore_client = None
+
+
+def _firestore():
+    global _firestore_client
+    if _firestore_client is None:
+        _firestore_client = firestore.Client()
+    return _firestore_client
 
 
 def _load_prompt(filename):
@@ -269,7 +282,52 @@ async def log(
             status_code=502,
         )
 
+    # Firestore is the read path for today's-stats/dashboard; the Form above is the
+    # system of record the user already relies on. A Firestore hiccup shouldn't turn
+    # an otherwise-successful log into an error, so this is best-effort and logged,
+    # not raised.
+    try:
+        _firestore().collection("logs").add({
+            "date": date.strip(),
+            "meal_type": meal_type,
+            "item": (item or "").strip(),
+            "calories": float(calories.strip()),
+            "protein": float(protein.strip()),
+            "logged_at": firestore.SERVER_TIMESTAMP,
+        })
+    except Exception as e:
+        print(f"Firestore log write failed: {e}")
+
     return JSONResponse({"ok": True})
+
+
+@app.get("/stats/today")
+async def stats_today(date: str):
+    """Sum of calories/protein logged for the given ISO date (client-local "today")."""
+    try:
+        datetime.strptime(date.strip(), "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"error": f"Bad date: {date!r} (expected YYYY-MM-DD)"}, status_code=400)
+
+    try:
+        docs = _firestore().collection("logs").where(filter=FieldFilter("date", "==", date.strip())).stream()
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    calories = protein = 0.0
+    count = 0
+    for doc in docs:
+        d = doc.to_dict()
+        calories += float(d.get("calories") or 0)
+        protein += float(d.get("protein") or 0)
+        count += 1
+
+    return JSONResponse({
+        "date": date.strip(),
+        "calories": round(calories),
+        "protein": round(protein),
+        "count": count,
+    })
 
 
 app.mount("/", StaticFiles(directory="public", html=True), name="static")

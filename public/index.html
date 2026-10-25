@@ -221,6 +221,30 @@
     }
     .logged-box .detail { font-size: 0.88rem; color: #666; margin-bottom: 20px; }
 
+    /* Today's running total — shown on the homepage and after logging a meal. */
+    .today-stats {
+      background: #f8f7ff;
+      border: 1px solid #e0e7ff;
+      border-radius: 10px;
+      padding: 10px 16px;
+      width: 100%;
+      max-width: 460px;
+      margin-bottom: 18px;
+      font-size: 0.88rem;
+      color: #374151;
+      text-align: center;
+      display: none;
+    }
+    .today-stats .label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-right: 6px;
+    }
+    .today-stats .value { font-weight: 700; color: #1a1a1a; }
+
     .results { display: none; margin-top: 24px; }
 
     .results-title {
@@ -308,6 +332,10 @@
 </head>
 <body>
   <h1>Meal Calorie Logger</h1>
+
+  <div class="today-stats" id="todayStats">
+    <span class="label">Today</span><span class="value" id="todayStatsText">—</span>
+  </div>
 
   <div class="card">
     <div id="inputSection">
@@ -412,6 +440,7 @@
       <div class="tick">✅</div>
       <div class="headline">Logged</div>
       <div class="detail" id="loggedDetail"></div>
+      <div class="detail" id="loggedTodayTotal"></div>
       <button class="btn btn-primary" onclick="reset()">Log another meal</button>
     </div>
 
@@ -483,6 +512,7 @@
       const mm = String(now.getMonth() + 1).padStart(2, "0");
       const dd = String(now.getDate()).padStart(2, "0");
       document.getElementById("date").value = `${mm}/${dd}/${now.getFullYear()}`;
+      refreshTodayStats(getIsoDate());
     })();
 
     // ---- Photo: in-page camera capture + gallery upload -------------------
@@ -723,6 +753,26 @@
       return dp.length === 3 ? `${dp[2]}-${dp[0]}-${dp[1]}` : raw;
     }
 
+    // Fetches and renders the running total for a given ISO date (the date field's
+    // value — so backdating a log correctly updates that day's total, not today's).
+    // Best-effort: stats are a nice-to-have, a failure here shouldn't block logging.
+    async function refreshTodayStats(dateIso) {
+      try {
+        const res = await fetch(`/stats/today?date=${encodeURIComponent(dateIso)}`);
+        const stats = await res.json();
+        if (!res.ok || stats.error) return null;
+
+        const text = stats.count > 0
+          ? `${stats.calories} kcal · ${stats.protein} g protein`
+          : "Nothing logged yet";
+        document.getElementById("todayStatsText").textContent = text;
+        document.getElementById("todayStats").style.display = "block";
+        return stats;
+      } catch (err) {
+        return null;
+      }
+    }
+
     function isManualMode() {
       return document.getElementById("manualInputs").style.display !== "none";
     }
@@ -772,7 +822,7 @@
           showFallback();
           return;
         }
-        showLogged(mealType, entry);
+        await showLogged(mealType, entry);
       } catch (err) {
         showError("Network error — the meal was not logged.");
         showFallback();
@@ -782,7 +832,7 @@
       }
     }
 
-    function showLogged(mealType, entry) {
+    async function showLogged(mealType, entry) {
       const bits = [mealType];
       if (entry.item) bits.push(entry.item);
       bits.push(`${entry.calories} kcal`, `${entry.protein} g protein`);
@@ -790,6 +840,12 @@
       document.getElementById("inputSection").style.display = "none";
       hideResults();
       document.getElementById("loggedBox").style.display = "block";
+
+      // getIsoDate() still reflects the date this entry was logged against —
+      // reset() (triggered by "Log another meal") doesn't touch that field.
+      const stats = await refreshTodayStats(getIsoDate());
+      document.getElementById("loggedTodayTotal").textContent =
+        stats && stats.count > 0 ? `So far that day: ${stats.calories} kcal · ${stats.protein} g protein` : "";
     }
 
     function showFallback() {
