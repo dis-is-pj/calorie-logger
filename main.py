@@ -2,7 +2,7 @@ import asyncio
 import base64
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from dotenv import load_dotenv
@@ -327,6 +327,68 @@ async def stats_today(date: str):
         "calories": round(calories),
         "protein": round(protein),
         "count": count,
+    })
+
+
+@app.get("/dashboard")
+async def dashboard(date: str):
+    """Today's individual logs plus the 7-day (today inclusive) calorie/protein average.
+
+    date is the client's local "today" — both the anchor for the 7-day window and
+    the day whose individual entries are listed.
+    """
+    try:
+        today = datetime.strptime(date.strip(), "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"error": f"Bad date: {date!r} (expected YYYY-MM-DD)"}, status_code=400)
+
+    today_str = date.strip()
+    start_str = (today - timedelta(days=6)).strftime("%Y-%m-%d")
+
+    try:
+        docs = list(
+            _firestore()
+            .collection("logs")
+            .where(filter=FieldFilter("date", ">=", start_str))
+            .where(filter=FieldFilter("date", "<=", today_str))
+            .stream()
+        )
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    today_logs = []
+    today_calories = today_protein = 0.0
+    range_calories = range_protein = 0.0
+
+    for doc in docs:
+        d = doc.to_dict()
+        cal = float(d.get("calories") or 0)
+        prot = float(d.get("protein") or 0)
+        range_calories += cal
+        range_protein += prot
+
+        if d.get("date") == today_str:
+            today_calories += cal
+            today_protein += prot
+            today_logs.append({
+                "meal_type": d.get("meal_type", ""),
+                "item": d.get("item", ""),
+                "calories": round(cal),
+                "protein": round(prot),
+            })
+
+    return JSONResponse({
+        "today": {
+            "date": today_str,
+            "logs": today_logs,
+            "calories": round(today_calories),
+            "protein": round(today_protein),
+            "count": len(today_logs),
+        },
+        "last_7_days": {
+            "calories_avg": round(range_calories / 7),
+            "protein_avg": round(range_protein / 7),
+        },
     })
 
 

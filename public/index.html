@@ -18,13 +18,29 @@
       padding: 24px 16px 48px;
     }
 
+    .top-row {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
     h1 {
       font-size: 1.4rem;
       font-weight: 700;
-      margin-bottom: 24px;
       color: #111;
       letter-spacing: -0.3px;
     }
+
+    a.dashboard-link {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #4f46e5;
+      text-decoration: none;
+    }
+    a.dashboard-link:hover { text-decoration: underline; }
 
     .card {
       background: #fff;
@@ -331,7 +347,10 @@
   </style>
 </head>
 <body>
-  <h1>Meal Calorie Logger</h1>
+  <div class="top-row">
+    <h1>Meal Calorie Logger</h1>
+    <a class="dashboard-link" href="/dashboard.html">📊 Dashboard</a>
+  </div>
 
   <div class="today-stats" id="todayStats">
     <span class="label">Today</span><span class="value" id="todayStatsText">—</span>
