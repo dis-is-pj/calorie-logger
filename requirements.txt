@@ -4,3 +4,4 @@ fastapi
 uvicorn[standard]
 python-multipart
 python-dotenv
+google-cloud-firestore
