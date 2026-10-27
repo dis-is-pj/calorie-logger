@@ -392,4 +392,110 @@ async def dashboard(date: str):
     })
 
 
+def _num_field(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+@app.get("/library")
+async def library_list():
+    try:
+        docs = _firestore().collection("library").order_by("name").stream()
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    items = [
+        {
+            "id": doc.id,
+            "name": (d := doc.to_dict()).get("name", ""),
+            "calories": d.get("calories", 0),
+            "protein": d.get("protein", 0),
+            "carbs": d.get("carbs", 0),
+            "fat": d.get("fat", 0),
+        }
+        for doc in docs
+    ]
+    return JSONResponse({"items": items})
+
+
+@app.post("/library")
+async def library_save(
+    name: str = Form(...),
+    calories: str = Form(...),
+    protein: str = Form(...),
+    carbs: str = Form("0"),
+    fat: str = Form("0"),
+):
+    """Create or (if an entry with this exact name already exists) overwrite it —
+    name is the natural key, so re-saving the same thing refreshes its values
+    instead of piling up duplicates."""
+    name = name.strip()
+    if not name:
+        return JSONResponse({"error": "Name is required."}, status_code=400)
+
+    data = {
+        "name": name,
+        "calories": _num_field(calories),
+        "protein": _num_field(protein),
+        "carbs": _num_field(carbs),
+        "fat": _num_field(fat),
+        "updated_at": firestore.SERVER_TIMESTAMP,
+    }
+
+    try:
+        col = _firestore().collection("library")
+        existing = list(col.where(filter=FieldFilter("name", "==", name)).limit(1).stream())
+        if existing:
+            existing[0].reference.set(data, merge=True)
+            doc_id = existing[0].id
+        else:
+            data["created_at"] = firestore.SERVER_TIMESTAMP
+            _, ref = col.add(data)
+            doc_id = ref.id
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    return JSONResponse({"ok": True, "id": doc_id})
+
+
+@app.put("/library/{item_id}")
+async def library_update(
+    item_id: str,
+    name: str = Form(...),
+    calories: str = Form(...),
+    protein: str = Form(...),
+    carbs: str = Form("0"),
+    fat: str = Form("0"),
+):
+    name = name.strip()
+    if not name:
+        return JSONResponse({"error": "Name is required."}, status_code=400)
+
+    try:
+        _firestore().collection("library").document(item_id).set({
+            "name": name,
+            "calories": _num_field(calories),
+            "protein": _num_field(protein),
+            "carbs": _num_field(carbs),
+            "fat": _num_field(fat),
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/library/{item_id}")
+async def library_delete(item_id: str):
+    try:
+        _firestore().collection("library").document(item_id).delete()
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    return JSONResponse({"ok": True})
+
+
 app.mount("/", StaticFiles(directory="public", html=True), name="static")

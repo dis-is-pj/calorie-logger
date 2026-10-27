@@ -177,6 +177,30 @@
       margin-top: 6px;
     }
 
+    .save-to-library { margin-bottom: 18px; }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #374151;
+      text-transform: none;
+      letter-spacing: normal;
+      cursor: pointer;
+    }
+    .checkbox-label input[type="checkbox"] { width: 16px; height: 16px; accent-color: #4f46e5; }
+    .save-to-library input[type="text"] { margin-top: 8px; }
+
+    .library-preview {
+      background: #f8f7ff;
+      border: 1px solid #e0e7ff;
+      border-radius: 10px;
+      padding: 14px;
+      margin: 14px 0;
+      display: none;
+    }
+
     .btn {
       display: flex;
       align-items: center;
@@ -349,7 +373,10 @@
 <body>
   <div class="top-row">
     <h1>Meal Calorie Logger</h1>
-    <a class="dashboard-link" href="/dashboard.html">📊 Dashboard</a>
+    <div>
+      <a class="dashboard-link" href="/library.html">📚 Library</a>
+      <a class="dashboard-link" href="/dashboard.html" style="margin-left:14px;">📊 Dashboard</a>
+    </div>
   </div>
 
   <div class="today-stats" id="todayStats">
@@ -361,6 +388,7 @@
       <div class="mode-toggle">
         <button type="button" class="btn-chip primary" id="modeAiBtn" onclick="setMode('ai')">🤖 AI estimate</button>
         <button type="button" class="btn-chip" id="modeManualBtn" onclick="setMode('manual')">✍️ Enter manually</button>
+        <button type="button" class="btn-chip" id="modeLibraryBtn" onclick="setMode('library')">📚 From library</button>
       </div>
 
       <div class="field">
@@ -439,8 +467,56 @@
           </div>
         </div>
 
+        <div class="field save-to-library">
+          <label class="checkbox-label">
+            <input type="checkbox" id="manualSaveToLibrary" onchange="toggleSaveName('manual')" />
+            💾 Save to library
+          </label>
+          <input type="text" id="manualSaveName" placeholder="Save as…" style="display:none" />
+        </div>
+
         <button class="btn btn-success" id="manualLogBtn" onclick="logMeal('manual')">Log this meal</button>
       </div><!-- /#manualInputs -->
+
+      <div id="libraryInputs" style="display:none">
+        <div class="field">
+          <label for="libSelect">Saved item</label>
+          <select id="libSelect" onchange="renderLibraryPreview()">
+            <option value="">— choose a saved item —</option>
+          </select>
+          <div class="field-hint" id="libEmptyHint" style="display:none">
+            Nothing saved yet — check "Save to library" after an AI estimate or manual entry to add one.
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="libScale">Scale (1 = the saved amount)</label>
+          <input type="number" id="libScale" value="1" min="0.1" step="0.1" oninput="renderLibraryPreview()" />
+        </div>
+
+        <div class="library-preview" id="libraryPreview">
+          <div class="macro-grid">
+            <div class="macro-cell">
+              <label for="libCalories">Calories (kcal)</label>
+              <input type="number" id="libCalories" min="0" />
+            </div>
+            <div class="macro-cell">
+              <label for="libProtein">Protein (g)</label>
+              <input type="number" id="libProtein" min="0" />
+            </div>
+            <div class="macro-cell">
+              <label for="libCarbs">Carbs (g)</label>
+              <input type="number" id="libCarbs" min="0" />
+            </div>
+            <div class="macro-cell">
+              <label for="libFat">Fat (g)</label>
+              <input type="number" id="libFat" min="0" />
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-success" id="libraryLogBtn" onclick="logMeal('library')">Log this meal</button>
+      </div><!-- /#libraryInputs -->
 
       <div class="error-msg" id="errorMsg"></div>
 
@@ -518,6 +594,14 @@
         <span id="explanationText"></span>
       </div>
 
+      <div class="field save-to-library">
+        <label class="checkbox-label">
+          <input type="checkbox" id="aiSaveToLibrary" onchange="toggleSaveName('ai')" />
+          💾 Save to library
+        </label>
+        <input type="text" id="aiSaveName" placeholder="Save as…" style="display:none" />
+      </div>
+
       <button class="btn btn-success" id="aiLogBtn" onclick="logMeal('ai')">Log this meal</button>
       <button class="btn btn-ghost" onclick="reset()">Start over</button>
     </div>
@@ -532,6 +616,7 @@
       const dd = String(now.getDate()).padStart(2, "0");
       document.getElementById("date").value = `${mm}/${dd}/${now.getFullYear()}`;
       refreshTodayStats(getIsoDate());
+      loadLibraryItems();
     })();
 
     // ---- Photo: in-page camera capture + gallery upload -------------------
@@ -751,17 +836,22 @@
     // pre-fill-URL-in-a-new-tab path survives only as a fallback when that fails.
 
     function setMode(mode) {
-      const manual = mode === "manual";
-      document.getElementById("aiInputs").style.display     = manual ? "none" : "block";
-      document.getElementById("manualInputs").style.display = manual ? "block" : "none";
-      document.getElementById("modeAiBtn").classList.toggle("primary", !manual);
-      document.getElementById("modeManualBtn").classList.toggle("primary", manual);
+      document.getElementById("aiInputs").style.display      = mode === "ai"      ? "block" : "none";
+      document.getElementById("manualInputs").style.display  = mode === "manual"  ? "block" : "none";
+      document.getElementById("libraryInputs").style.display = mode === "library" ? "block" : "none";
+      document.getElementById("modeAiBtn").classList.toggle("primary", mode === "ai");
+      document.getElementById("modeManualBtn").classList.toggle("primary", mode === "manual");
+      document.getElementById("modeLibraryBtn").classList.toggle("primary", mode === "library");
       hideError();
       hideFallback();
-      if (manual) {
+      if (mode !== "ai") {
         closeCamera();
         hideResults();
+      }
+      if (mode === "manual") {
         document.getElementById("mItem").focus();
+      } else if (mode === "library") {
+        loadLibraryItems();
       }
     }
 
@@ -792,26 +882,127 @@
       }
     }
 
-    function isManualMode() {
-      return document.getElementById("manualInputs").style.display !== "none";
+    function getMode() {
+      if (document.getElementById("manualInputs").style.display !== "none") return "manual";
+      if (document.getElementById("libraryInputs").style.display !== "none") return "library";
+      return "ai";
     }
 
     function currentEntry() {
-      return isManualMode()
-        ? {
-            item:     document.getElementById("mItem").value.trim(),
-            calories: document.getElementById("mCalories").value.trim(),
-            protein:  document.getElementById("mProtein").value.trim(),
-          }
-        : {
-            item:     document.getElementById("rItemSummary").value.trim(),
-            calories: document.getElementById("rCalories").value.trim(),
-            protein:  document.getElementById("rProtein").value.trim(),
-          };
+      const mode = getMode();
+      if (mode === "manual") {
+        return {
+          item:     document.getElementById("mItem").value.trim(),
+          calories: document.getElementById("mCalories").value.trim(),
+          protein:  document.getElementById("mProtein").value.trim(),
+        };
+      }
+      if (mode === "library") {
+        const sel = document.getElementById("libSelect");
+        const label = sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : "";
+        const scale = parseFloat(document.getElementById("libScale").value) || 1;
+        return {
+          item:     scale !== 1 ? `${label} (x${scale})` : label,
+          calories: document.getElementById("libCalories").value.trim(),
+          protein:  document.getElementById("libProtein").value.trim(),
+        };
+      }
+      return {
+        item:     document.getElementById("rItemSummary").value.trim(),
+        calories: document.getElementById("rCalories").value.trim(),
+        protein:  document.getElementById("rProtein").value.trim(),
+      };
+    }
+
+    // ---- Library -----------------------------------------------------------
+
+    let libraryItems = [];
+
+    function toggleSaveName(mode) {
+      const checked = document.getElementById(`${mode}SaveToLibrary`).checked;
+      const nameInput = document.getElementById(`${mode}SaveName`);
+      if (checked) {
+        const defaultName = mode === "manual"
+          ? document.getElementById("mItem").value.trim()
+          : document.getElementById("rItemSummary").value.trim();
+        if (!nameInput.value) nameInput.value = defaultName;
+        nameInput.style.display = "block";
+      } else {
+        nameInput.style.display = "none";
+      }
+    }
+
+    // Best-effort, same spirit as refreshTodayStats — a failed fetch here just
+    // leaves the dropdown empty rather than disrupting anything else.
+    async function loadLibraryItems() {
+      try {
+        const res = await fetch("/library");
+        const data = await res.json();
+        if (!res.ok || data.error) return;
+        libraryItems = data.items || [];
+      } catch (err) {
+        libraryItems = [];
+      }
+
+      const sel = document.getElementById("libSelect");
+      const previous = sel.value;
+      sel.innerHTML = '<option value="">— choose a saved item —</option>' +
+        libraryItems.map(it => `<option value="${esc(it.id)}">${esc(it.name)}</option>`).join("");
+      if (libraryItems.some(it => it.id === previous)) sel.value = previous;
+
+      document.getElementById("libEmptyHint").style.display = libraryItems.length ? "none" : "block";
+      renderLibraryPreview();
+    }
+
+    function renderLibraryPreview() {
+      const id = document.getElementById("libSelect").value;
+      const preview = document.getElementById("libraryPreview");
+      const item = libraryItems.find(it => it.id === id);
+
+      if (!item) {
+        preview.style.display = "none";
+        return;
+      }
+
+      const scale = parseFloat(document.getElementById("libScale").value) || 1;
+      document.getElementById("libCalories").value = Math.round(item.calories * scale);
+      document.getElementById("libProtein").value  = Math.round(item.protein * scale);
+      document.getElementById("libCarbs").value    = Math.round(item.carbs * scale);
+      document.getElementById("libFat").value      = Math.round(item.fat * scale);
+      preview.style.display = "block";
+    }
+
+    // Fires after a successful /log when the "save to library" checkbox is
+    // checked. Best-effort — the meal is already logged either way.
+    async function saveToLibraryIfChecked(mode, entry) {
+      if (mode === "library") return; // nothing new to save when logging FROM the library
+      const checked = document.getElementById(`${mode}SaveToLibrary`)?.checked;
+      if (!checked) return;
+
+      const name = document.getElementById(`${mode}SaveName`).value.trim() || entry.item;
+      if (!name) return;
+
+      const fd = new FormData();
+      fd.append("name", name);
+      fd.append("calories", entry.calories);
+      fd.append("protein", entry.protein);
+      if (mode === "ai") {
+        fd.append("carbs", document.getElementById("rCarbs").value || "0");
+        fd.append("fat", document.getElementById("rFat").value || "0");
+      }
+
+      try {
+        await fetch("/library", { method: "POST", body: fd });
+        await loadLibraryItems(); // so the new/updated entry shows up next time without a reload
+      } catch (err) {
+        // Non-fatal — the meal itself was already logged successfully.
+      }
     }
 
     async function logMeal(source) {
-      const btn = document.getElementById(source === "manual" ? "manualLogBtn" : "aiLogBtn");
+      const btn = document.getElementById(
+        source === "manual" ? "manualLogBtn" : source === "library" ? "libraryLogBtn" : "aiLogBtn"
+      );
       const entry = currentEntry();
 
       if (entry.calories === "" || entry.protein === "") {
@@ -841,6 +1032,7 @@
           showFallback();
           return;
         }
+        await saveToLibraryIfChecked(source, entry);
         await showLogged(mealType, entry);
       } catch (err) {
         showError("Network error — the meal was not logged.");
@@ -902,6 +1094,14 @@
       document.getElementById("mItem").value = "";
       document.getElementById("mCalories").value = "";
       document.getElementById("mProtein").value = "";
+      for (const mode of ["ai", "manual"]) {
+        document.getElementById(`${mode}SaveToLibrary`).checked = false;
+        document.getElementById(`${mode}SaveName`).value = "";
+        document.getElementById(`${mode}SaveName`).style.display = "none";
+      }
+      document.getElementById("libSelect").value = "";
+      document.getElementById("libScale").value = "1";
+      renderLibraryPreview();
       closeCamera();
       clearPhoto();
       hideError();
@@ -909,7 +1109,8 @@
       hideResults();
       document.getElementById("loggedBox").style.display = "none";
       document.getElementById("inputSection").style.display = "block";
-      document.getElementById(isManualMode() ? "mItem" : "description").focus();
+      const mode = getMode();
+      document.getElementById(mode === "manual" ? "mItem" : mode === "library" ? "libSelect" : "description").focus();
     }
 
     function setLoading(on) {

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Library — Meal Calorie Logger</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px 48px;
+    }
+
+    .top-row {
+      width: 100%;
+      max-width: 520px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 700; color: #111; letter-spacing: -0.3px; }
+
+    a.back-link {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #4f46e5;
+      text-decoration: none;
+    }
+    a.back-link:hover { text-decoration: underline; }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 24px;
+      width: 100%;
+      max-width: 520px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #6366f1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.92rem;
+      color: #1a1a1a;
+      background: #fafafa;
+    }
+    input:focus { outline: none; border-color: #4f46e5; background: #fff; }
+
+    .row-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+      gap: 8px;
+      align-items: end;
+      padding: 12px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .row-grid:last-child { border-bottom: none; }
+    .row-grid .field { margin-bottom: 0; }
+
+    @media (max-width: 480px) {
+      .row-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 9px 12px;
+    }
+    .btn-save { background: #4f46e5; color: #fff; }
+    .btn-save:hover { background: #4338ca; }
+    .btn-delete { background: #fef2f2; color: #b91c1c; }
+    .btn-delete:hover { background: #fee2e2; }
+    .btn-add { background: #16a34a; color: #fff; width: 100%; margin-top: 10px; padding: 12px; }
+    .btn-add:hover { background: #15803d; }
+
+    .btn-group { display: flex; gap: 6px; }
+
+    .empty-note { color: #9ca3af; font-size: 0.88rem; text-align: center; padding: 12px 0; }
+
+    .status-note {
+      font-size: 0.8rem;
+      margin-top: 10px;
+      display: none;
+    }
+    .status-note.ok    { color: #16a34a; }
+    .status-note.error { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <div class="top-row">
+    <h1>Library</h1>
+    <div>
+      <a class="back-link" href="/dashboard.html">📊 Dashboard</a>
+      <a class="back-link" href="/" style="margin-left:14px;">← Back to logger</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Saved items</div>
+    <div id="itemList"></div>
+    <div class="status-note" id="statusNote"></div>
+  </div>
+
+  <div class="card">
+    <div class="section-title">Add new item</div>
+    <div class="row-grid">
+      <div class="field"><label>Name</label><input type="text" id="newName" placeholder="e.g. 2 wheat rotis weighing 76g" /></div>
+      <div class="field"><label>Calories</label><input type="number" id="newCalories" min="0" /></div>
+      <div class="field"><label>Protein</label><input type="number" id="newProtein" min="0" /></div>
+      <div class="field"><label>Carbs</label><input type="number" id="newCarbs" min="0" /></div>
+      <div class="field"><label>Fat</label><input type="number" id="newFat" min="0" /></div>
+    </div>
+    <button class="btn-add" onclick="addItem()">Add to library</button>
+  </div>
+
+  <script>
+    function esc(s) {
+      return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    function showStatus(msg, isError) {
+      const el = document.getElementById("statusNote");
+      el.textContent = msg;
+      el.className = `status-note ${isError ? "error" : "ok"}`;
+      el.style.display = "block";
+      setTimeout(() => { el.style.display = "none"; }, 3000);
+    }
+
+    function rowHtml(item) {
+      return `
+        <div class="row-grid" data-id="${esc(item.id)}">
+          <div class="field"><label>Name</label><input type="text" class="f-name" value="${esc(item.name)}" /></div>
+          <div class="field"><label>Calories</label><input type="number" class="f-calories" min="0" value="${item.calories}" /></div>
+          <div class="field"><label>Protein</label><input type="number" class="f-protein" min="0" value="${item.protein}" /></div>
+          <div class="field"><label>Carbs</label><input type="number" class="f-carbs" min="0" value="${item.carbs}" /></div>
+          <div class="field"><label>Fat</label><input type="number" class="f-fat" min="0" value="${item.fat}" /></div>
+          <div class="btn-group">
+            <button class="btn-save" onclick="saveItem('${esc(item.id)}')">Save</button>
+            <button class="btn-delete" onclick="deleteItem('${esc(item.id)}')">✕</button>
+          </div>
+        </div>`;
+    }
+
+    async function loadItems() {
+      const el = document.getElementById("itemList");
+      try {
+        const res = await fetch("/library");
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `Server error ${res.status}`);
+
+        const items = data.items || [];
+        el.innerHTML = items.length
+          ? items.map(rowHtml).join("")
+          : '<div class="empty-note">Nothing saved yet. Add one below, or check "Save to library" after an AI estimate on the main page.</div>';
+      } catch (err) {
+        el.innerHTML = `<div class="empty-note">Could not load the library: ${esc(err.message)}</div>`;
+      }
+    }
+
+    function rowFields(row) {
+      return {
+        name:     row.querySelector(".f-name").value.trim(),
+        calories: row.querySelector(".f-calories").value,
+        protein:  row.querySelector(".f-protein").value,
+        carbs:    row.querySelector(".f-carbs").value,
+        fat:      row.querySelector(".f-fat").value,
+      };
+    }
+
+    async function saveItem(id) {
+      const row = document.querySelector(`.row-grid[data-id="${id}"]`);
+      const f = rowFields(row);
+      if (!f.name) { showStatus("Name can't be empty.", true); return; }
+
+      const fd = new FormData();
+      Object.entries(f).forEach(([k, v]) => fd.append(k, v));
+
+      try {
+        const res = await fetch(`/library/${encodeURIComponent(id)}`, { method: "PUT", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `Server error ${res.status}`);
+        showStatus("Saved.", false);
+      } catch (err) {
+        showStatus(`Could not save: ${err.message}`, true);
+      }
+    }
+
+    async function deleteItem(id) {
+      try {
+        const res = await fetch(`/library/${encodeURIComponent(id)}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `Server error ${res.status}`);
+        await loadItems();
+      } catch (err) {
+        showStatus(`Could not delete: ${err.message}`, true);
+      }
+    }
+
+    async function addItem() {
+      const name = document.getElementById("newName").value.trim();
+      if (!name) { showStatus("Name is required.", true); return; }
+
+      const fd = new FormData();
+      fd.append("name", name);
+      fd.append("calories", document.getElementById("newCalories").value || "0");
+      fd.append("protein", document.getElementById("newProtein").value || "0");
+      fd.append("carbs", document.getElementById("newCarbs").value || "0");
+      fd.append("fat", document.getElementById("newFat").value || "0");
+
+      try {
+        const res = await fetch("/library", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `Server error ${res.status}`);
+
+        ["newName", "newCalories", "newProtein", "newCarbs", "newFat"].forEach(id => {
+          document.getElementById(id).value = "";
+        });
+        showStatus("Added.", false);
+        await loadItems();
+      } catch (err) {
+        showStatus(`Could not add: ${err.message}`, true);
+      }
+    }
+
+    loadItems();
+  </script>
+</body>
+</html>
