@@ -398,7 +398,7 @@
 
       <div class="field">
         <label for="mealType">Meal type</label>
-        <select id="mealType">
+        <select id="mealType" onchange="renderLibrarySelect()">
           <option value="Breakfast">Breakfast</option>
           <option value="Lunch">Lunch</option>
           <option value="Dinner">Dinner</option>
@@ -943,14 +943,33 @@
       } catch (err) {
         libraryItems = [];
       }
+      renderLibrarySelect();
+    }
 
+    // Rebuilds the dropdown from the already-fetched libraryItems, scoped to the
+    // currently selected meal type. Items saved before meal types were tracked
+    // have no meal_type and stay visible under every type rather than vanishing.
+    function renderLibrarySelect() {
+      const mealType = document.getElementById("mealType").value;
       const sel = document.getElementById("libSelect");
       const previous = sel.value;
-      sel.innerHTML = '<option value="">— choose a saved item —</option>' +
-        libraryItems.map(it => `<option value="${esc(it.id)}">${esc(it.name)}</option>`).join("");
-      if (libraryItems.some(it => it.id === previous)) sel.value = previous;
 
-      document.getElementById("libEmptyHint").style.display = libraryItems.length ? "none" : "block";
+      const filtered = libraryItems.filter(it => !it.meal_type || it.meal_type === mealType);
+
+      sel.innerHTML = '<option value="">— choose a saved item —</option>' +
+        filtered.map(it => `<option value="${esc(it.id)}">${esc(it.name)}</option>`).join("");
+      sel.value = filtered.some(it => it.id === previous) ? previous : "";
+
+      const hint = document.getElementById("libEmptyHint");
+      if (filtered.length) {
+        hint.style.display = "none";
+      } else {
+        hint.textContent = libraryItems.length
+          ? `Nothing saved for ${mealType} yet.`
+          : 'Nothing saved yet — check "Save to library" after an AI estimate or manual entry to add one.';
+        hint.style.display = "block";
+      }
+
       renderLibraryPreview();
     }
 
@@ -984,6 +1003,7 @@
 
       const fd = new FormData();
       fd.append("name", name);
+      fd.append("meal_type", document.getElementById("mealType").value);
       fd.append("calories", entry.calories);
       fd.append("protein", entry.protein);
       if (mode === "ai") {

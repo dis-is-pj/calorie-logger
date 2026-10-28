@@ -66,7 +66,7 @@
       letter-spacing: 0.4px;
     }
 
-    input[type="text"], input[type="number"] {
+    input[type="text"], input[type="number"], select {
       width: 100%;
       padding: 9px 10px;
       border: 1.5px solid #e0e0e0;
@@ -75,11 +75,11 @@
       color: #1a1a1a;
       background: #fafafa;
     }
-    input:focus { outline: none; border-color: #4f46e5; background: #fff; }
+    input:focus, select:focus { outline: none; border-color: #4f46e5; background: #fff; }
 
     .row-grid {
       display: grid;
-      grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto;
+      grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr 1fr auto;
       gap: 8px;
       align-items: end;
       padding: 12px 0;
@@ -140,6 +140,7 @@
     <div class="section-title">Add new item</div>
     <div class="row-grid">
       <div class="field"><label>Name</label><input type="text" id="newName" placeholder="e.g. 2 wheat rotis weighing 76g" /></div>
+      <div class="field"><label>Meal type</label><select id="newMealType"></select></div>
       <div class="field"><label>Calories</label><input type="number" id="newCalories" min="0" /></div>
       <div class="field"><label>Protein</label><input type="number" id="newProtein" min="0" /></div>
       <div class="field"><label>Carbs</label><input type="number" id="newCarbs" min="0" /></div>
@@ -149,9 +150,22 @@
   </div>
 
   <script>
+    const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snacks", "Protein"];
+
     function esc(s) {
       return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     }
+
+    // "" (any meal type) stays selectable so an item can intentionally show up
+    // under every meal type in the picker — not just legacy pre-meal-type items.
+    function mealTypeOptionsHtml(selected) {
+      const opts = ['<option value="">— any —</option>', ...MEAL_TYPES.map(mt =>
+        `<option value="${mt}"${mt === selected ? " selected" : ""}>${mt}</option>`
+      )];
+      return opts.join("");
+    }
+
+    document.getElementById("newMealType").innerHTML = mealTypeOptionsHtml("");
 
     function showStatus(msg, isError) {
       const el = document.getElementById("statusNote");
@@ -165,6 +179,7 @@
       return `
         <div class="row-grid" data-id="${esc(item.id)}">
           <div class="field"><label>Name</label><input type="text" class="f-name" value="${esc(item.name)}" /></div>
+          <div class="field"><label>Meal type</label><select class="f-meal-type">${mealTypeOptionsHtml(item.meal_type)}</select></div>
           <div class="field"><label>Calories</label><input type="number" class="f-calories" min="0" value="${item.calories}" /></div>
           <div class="field"><label>Protein</label><input type="number" class="f-protein" min="0" value="${item.protein}" /></div>
           <div class="field"><label>Carbs</label><input type="number" class="f-carbs" min="0" value="${item.carbs}" /></div>
@@ -194,11 +209,12 @@
 
     function rowFields(row) {
       return {
-        name:     row.querySelector(".f-name").value.trim(),
-        calories: row.querySelector(".f-calories").value,
-        protein:  row.querySelector(".f-protein").value,
-        carbs:    row.querySelector(".f-carbs").value,
-        fat:      row.querySelector(".f-fat").value,
+        name:      row.querySelector(".f-name").value.trim(),
+        meal_type: row.querySelector(".f-meal-type").value,
+        calories:  row.querySelector(".f-calories").value,
+        protein:   row.querySelector(".f-protein").value,
+        carbs:     row.querySelector(".f-carbs").value,
+        fat:       row.querySelector(".f-fat").value,
       };
     }
 
@@ -237,6 +253,7 @@
 
       const fd = new FormData();
       fd.append("name", name);
+      fd.append("meal_type", document.getElementById("newMealType").value);
       fd.append("calories", document.getElementById("newCalories").value || "0");
       fd.append("protein", document.getElementById("newProtein").value || "0");
       fd.append("carbs", document.getElementById("newCarbs").value || "0");
@@ -250,6 +267,7 @@
         ["newName", "newCalories", "newProtein", "newCarbs", "newFat"].forEach(id => {
           document.getElementById(id).value = "";
         });
+        document.getElementById("newMealType").value = "";
         showStatus("Added.", false);
         await loadItems();
       } catch (err) {
