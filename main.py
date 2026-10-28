@@ -410,6 +410,7 @@ async def library_list():
         {
             "id": doc.id,
             "name": (d := doc.to_dict()).get("name", ""),
+            "meal_type": d.get("meal_type", ""),
             "calories": d.get("calories", 0),
             "protein": d.get("protein", 0),
             "carbs": d.get("carbs", 0),
@@ -427,6 +428,7 @@ async def library_save(
     protein: str = Form(...),
     carbs: str = Form("0"),
     fat: str = Form("0"),
+    meal_type: str = Form(""),
 ):
     """Create or (if an entry with this exact name already exists) overwrite it —
     name is the natural key, so re-saving the same thing refreshes its values
@@ -437,6 +439,7 @@ async def library_save(
 
     data = {
         "name": name,
+        "meal_type": (meal_type or "").strip(),
         "calories": _num_field(calories),
         "protein": _num_field(protein),
         "carbs": _num_field(carbs),
@@ -468,6 +471,7 @@ async def library_update(
     protein: str = Form(...),
     carbs: str = Form("0"),
     fat: str = Form("0"),
+    meal_type: str = Form(""),
 ):
     name = name.strip()
     if not name:
@@ -476,6 +480,7 @@ async def library_update(
     try:
         _firestore().collection("library").document(item_id).set({
             "name": name,
+            "meal_type": (meal_type or "").strip(),
             "calories": _num_field(calories),
             "protein": _num_field(protein),
             "carbs": _num_field(carbs),
