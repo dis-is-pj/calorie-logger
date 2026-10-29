@@ -201,6 +201,7 @@ async def estimate(
         resp = await client.chat.completions.create(
             model=ITEM_MODEL,
             max_completion_tokens=2000,
+            reasoning_effort="low",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": ITEM_PROMPT},
