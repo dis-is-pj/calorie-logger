@@ -73,17 +73,12 @@
     .stat-box .label { font-size: 0.72rem; color: #6b7280; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
 
     .log-list { margin-top: 16px; }
-    .log-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 10px 0;
-      border-bottom: 1px solid #f0f0f0;
-      font-size: 0.88rem;
-    }
+    .log-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.88rem; }
     .log-row:last-child { border-bottom: none; }
-    .log-row .meta { color: #333; }
-    .log-row .meta .meal-type {
+
+    .log-row-view { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .log-row-view .meta { color: #333; flex: 1; min-width: 0; }
+    .log-row-view .meta .meal-type {
       font-size: 0.68rem;
       font-weight: 700;
       color: #6366f1;
@@ -92,7 +87,52 @@
       display: block;
       margin-bottom: 2px;
     }
-    .log-row .nums { color: #666; white-space: nowrap; text-align: right; }
+    .log-row-view .nums { color: #666; white-space: nowrap; }
+
+    .log-row-actions { display: flex; gap: 2px; flex-shrink: 0; }
+    .icon-btn {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: #9ca3af;
+      padding: 2px 5px;
+      line-height: 1;
+    }
+    .icon-btn:hover { color: #4f46e5; }
+    .icon-btn.danger:hover { color: #b91c1c; }
+
+    .log-row-edit { display: none; margin-top: 10px; }
+    .log-row-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .log-row-fields select, .log-row-fields input {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: #1a1a1a;
+      background: #fafafa;
+    }
+    .log-row-fields select:focus, .log-row-fields input:focus { outline: none; border-color: #4f46e5; background: #fff; }
+
+    .btn-small {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 7px 12px;
+    }
+    .btn-small.save { background: #4f46e5; color: #fff; }
+    .btn-small.save:hover { background: #4338ca; }
+    .btn-small.cancel { background: #f3f4f6; color: #374151; }
+    .btn-small.cancel:hover { background: #e5e7eb; }
 
     .empty-note { color: #9ca3af; font-size: 0.88rem; text-align: center; padding: 12px 0; }
 
@@ -150,6 +190,13 @@
   </div>
 
   <script>
+    const MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snacks", "Protein"];
+
+    // The date every row in today's list belongs to — set by loadDashboard(),
+    // needed as the "date" field when PUT-ing an edit (the entry's day doesn't
+    // change here, only its other fields).
+    let currentDate = "";
+
     function esc(s) {
       return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
     }
@@ -161,26 +208,104 @@
       return `${now.getFullYear()}-${mm}-${dd}`;
     }
 
+    function mealTypeOptionsHtml(selected) {
+      return MEAL_TYPES.map(mt =>
+        `<option value="${mt}"${mt === selected ? " selected" : ""}>${mt}</option>`
+      ).join("");
+    }
+
+    function logRowHtml(log) {
+      return `
+        <div class="log-row" data-id="${esc(log.id)}">
+          <div class="log-row-view">
+            <div class="meta">
+              <span class="meal-type">${esc(log.meal_type)}</span>
+              ${esc(log.item) || "—"}
+            </div>
+            <div class="nums">${log.calories} kcal · ${log.protein} g</div>
+            <div class="log-row-actions">
+              <button class="icon-btn" onclick="editLog('${esc(log.id)}')" title="Edit">✎</button>
+              <button class="icon-btn danger" onclick="deleteLog('${esc(log.id)}')" title="Delete">✕</button>
+            </div>
+          </div>
+          <div class="log-row-edit">
+            <div class="log-row-fields">
+              <select class="f-meal-type">${mealTypeOptionsHtml(log.meal_type)}</select>
+              <input type="text" class="f-item" value="${esc(log.item)}" placeholder="Item" />
+              <input type="number" class="f-calories" min="0" value="${log.calories}" placeholder="Calories" />
+              <input type="number" class="f-protein" min="0" value="${log.protein}" placeholder="Protein" />
+            </div>
+            <div class="log-row-actions">
+              <button class="btn-small save" onclick="saveLog('${esc(log.id)}')">Save</button>
+              <button class="btn-small cancel" onclick="cancelEditLog('${esc(log.id)}')">Cancel</button>
+            </div>
+          </div>
+        </div>`;
+    }
+
     function renderLogList(logs) {
       const el = document.getElementById("todayLogList");
-      if (!logs.length) {
-        el.innerHTML = '<div class="empty-note">Nothing logged yet today.</div>';
-        return;
+      el.innerHTML = logs.length
+        ? logs.map(logRowHtml).join("")
+        : '<div class="empty-note">Nothing logged yet today.</div>';
+    }
+
+    function logRow(id) {
+      return document.querySelector(`.log-row[data-id="${id}"]`);
+    }
+
+    function editLog(id) {
+      const row = logRow(id);
+      row.querySelector(".log-row-view").style.display = "none";
+      row.querySelector(".log-row-edit").style.display = "block";
+    }
+
+    function cancelEditLog(id) {
+      const row = logRow(id);
+      row.querySelector(".log-row-edit").style.display = "none";
+      row.querySelector(".log-row-view").style.display = "flex";
+    }
+
+    async function saveLog(id) {
+      const row = logRow(id);
+      const fd = new FormData();
+      fd.append("date", currentDate);
+      fd.append("meal_type", row.querySelector(".f-meal-type").value);
+      fd.append("item", row.querySelector(".f-item").value.trim());
+      fd.append("calories", row.querySelector(".f-calories").value || "0");
+      fd.append("protein", row.querySelector(".f-protein").value || "0");
+
+      try {
+        const res = await fetch(`/logs/${encodeURIComponent(id)}`, { method: "PUT", body: fd });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `Server error ${res.status}`);
+        await loadDashboard(); // re-fetch so today's totals and the 7-day average pick up the edit
+      } catch (err) {
+        const el = document.getElementById("errorNote");
+        el.textContent = `Could not save: ${err.message}`;
+        el.style.display = "block";
       }
-      el.innerHTML = logs.map(log => `
-        <div class="log-row">
-          <div class="meta">
-            <span class="meal-type">${esc(log.meal_type)}</span>
-            ${esc(log.item) || "—"}
-          </div>
-          <div class="nums">${log.calories} kcal · ${log.protein} g</div>
-        </div>
-      `).join("");
+    }
+
+    async function deleteLog(id) {
+      if (!confirm("Delete this log entry? This can't be undone.")) return;
+
+      try {
+        const res = await fetch(`/logs/${encodeURIComponent(id)}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || `Server error ${res.status}`);
+        await loadDashboard();
+      } catch (err) {
+        const el = document.getElementById("errorNote");
+        el.textContent = `Could not delete: ${err.message}`;
+        el.style.display = "block";
+      }
     }
 
     async function loadDashboard() {
+      currentDate = todayIso();
       try {
-        const res = await fetch(`/dashboard?date=${encodeURIComponent(todayIso())}`);
+        const res = await fetch(`/dashboard?date=${encodeURIComponent(currentDate)}`);
         const data = await res.json();
         if (!res.ok || data.error) {
           throw new Error(data.error || `Server error ${res.status}`);

@@ -371,6 +371,7 @@ async def dashboard(date: str):
             today_calories += cal
             today_protein += prot
             today_logs.append({
+                "id": doc.id,
                 "meal_type": d.get("meal_type", ""),
                 "item": d.get("item", ""),
                 "calories": round(cal),
@@ -397,6 +398,52 @@ def _num_field(value):
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+@app.put("/logs/{log_id}")
+async def log_update(
+    log_id: str,
+    date: str = Form(...),
+    meal_type: str = Form(...),
+    item: str = Form(""),
+    calories: str = Form(...),
+    protein: str = Form(...),
+):
+    """Edits a Firestore log entry in place. Firestore-only — it does NOT touch the
+    Google Form/Sheet, since Forms responses aren't editable through the POST
+    endpoint /log uses. The Sheet keeps the original value for this entry."""
+    try:
+        datetime.strptime(date.strip(), "%Y-%m-%d")
+    except ValueError:
+        return JSONResponse({"error": f"Bad date: {date!r} (expected YYYY-MM-DD)"}, status_code=400)
+
+    meal_type = meal_type.strip()
+    if meal_type not in MEAL_TYPES:
+        return JSONResponse({"error": f"Unknown meal type: {meal_type!r}"}, status_code=400)
+
+    try:
+        _firestore().collection("logs").document(log_id).set({
+            "date": date.strip(),
+            "meal_type": meal_type,
+            "item": (item or "").strip(),
+            "calories": _num_field(calories),
+            "protein": _num_field(protein),
+        }, merge=True)
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/logs/{log_id}")
+async def log_delete(log_id: str):
+    """Firestore-only, same caveat as log_update — the Sheet keeps its own copy."""
+    try:
+        _firestore().collection("logs").document(log_id).delete()
+    except Exception as e:
+        return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
+
+    return JSONResponse({"ok": True})
 
 
 @app.get("/library")
