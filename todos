@@ -1,0 +1,10 @@
+- Turn the logger into a chat interface to capture feedback for later analysis:
+  - Initial estimation flow looks the same as today.
+  - After an estimation, add an "improve this estimate" button that opens a
+    chat-style interface where the user describes what's wrong (optionally
+    attaching another image), and the AI re-estimates based on that feedback.
+  - Each AI response in that chat gets its own "log this" button, so any
+    revision can be logged, not just the final one.
+  - Store the whole conversation (all turns, all revisions) whenever a
+    logging exercise has feedback attached, so we can later analyze what
+    mistakes the model made and what corrections users actually needed.

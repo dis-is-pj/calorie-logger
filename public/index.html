@@ -862,6 +862,13 @@
       return dp.length === 3 ? `${dp[2]}-${dp[0]}-${dp[1]}` : raw;
     }
 
+    function localTodayIso() {
+      const now = new Date();
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      return `${now.getFullYear()}-${mm}-${dd}`;
+    }
+
     // Fetches and renders the running total for a given ISO date (the date field's
     // value — so backdating a log correctly updates that day's total, not today's).
     // Best-effort: stats are a nice-to-have, a failure here shouldn't block logging.
@@ -1028,6 +1035,12 @@
       if (entry.calories === "" || entry.protein === "") {
         showError("Calories and protein are both required.");
         return;
+      }
+
+      const dateIso = getIsoDate();
+      if (dateIso !== localTodayIso()) {
+        const ok = confirm(`This will log to ${dateIso}, not today (${localTodayIso()}). Continue?`);
+        if (!ok) return;
       }
 
       hideError();
