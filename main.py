@@ -44,6 +44,22 @@ ENTRY_PROTEIN = "entry.343920601"
 
 MEAL_TYPES = ("Breakfast", "Lunch", "Dinner", "Snacks", "Protein")
 
+# Multi-tenancy is a single env var, not real user accounts: each deployed
+# instance sets TENANT to its own user and gets its own Firestore collections,
+# so separate people sharing one GCP project/Firestore database don't see
+# each other's logs/library. Unset (the original instance) keeps bare names.
+TENANT = os.environ.get("TENANT", "").strip()
+
+# The Google Form/Sheet is a mirror of the original instance's log history,
+# not a per-tenant thing — additional instances skip it by default so their
+# entries don't get written into that same Sheet.
+SYNC_TO_FORM = os.environ.get("SYNC_TO_FORM", "true" if not TENANT else "false").strip().lower() == "true"
+
+
+def _collection(name):
+    return f"{name}_{TENANT}" if TENANT else name
+
+
 # Lazy singleton: created on first use so a missing/broken Firestore setup
 # surfaces as a per-request error instead of crashing the whole app at import.
 _firestore_client = None
@@ -248,47 +264,48 @@ async def log(
         except ValueError:
             return JSONResponse({"error": f"{label} must be a number."}, status_code=400)
 
-    # A date question posts as three separate params — the YYYY-MM-DD form the
-    # pre-fill URL uses is not accepted here. The trailing fields are what the
-    # form's own page submits alongside the answers.
-    payload = {
-        f"{ENTRY_DATE}_year": day.year,
-        f"{ENTRY_DATE}_month": day.month,
-        f"{ENTRY_DATE}_day": day.day,
-        ENTRY_MEAL: meal_type,
-        ENTRY_ITEM: (item or "").strip(),
-        ENTRY_CALORIES: calories.strip(),
-        ENTRY_PROTEIN: protein.strip(),
-        "fvv": "1",
-        "pageHistory": "0",
-        "submissionTimestamp": "-1",
-    }
+    if SYNC_TO_FORM:
+        # A date question posts as three separate params — the YYYY-MM-DD form the
+        # pre-fill URL uses is not accepted here. The trailing fields are what the
+        # form's own page submits alongside the answers.
+        payload = {
+            f"{ENTRY_DATE}_year": day.year,
+            f"{ENTRY_DATE}_month": day.month,
+            f"{ENTRY_DATE}_day": day.day,
+            ENTRY_MEAL: meal_type,
+            ENTRY_ITEM: (item or "").strip(),
+            ENTRY_CALORIES: calories.strip(),
+            ENTRY_PROTEIN: protein.strip(),
+            "fvv": "1",
+            "pageHistory": "0",
+            "submissionTimestamp": "-1",
+        }
 
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.post(FORM_POST_URL, data=payload)
+        except httpx.HTTPError as e:
+            return JSONResponse({"error": f"Could not reach Google Forms: {e}"}, status_code=502)
+
+        if resp.status_code != 200:
+            return JSONResponse(
+                {"error": f"Google Forms returned {resp.status_code}."}, status_code=502
+            )
+
+        # Google answers 200 either way: the confirmation page on success, or the form
+        # re-rendered with errors on rejection. The form element only exists in the latter.
+        if 'id="mG61Hd"' in resp.text or "FormviewerViewNavigationSubmitButton" in resp.text:
+            return JSONResponse(
+                {"error": "Google rejected the submission — use the manual form link below."},
+                status_code=502,
+            )
+
+    # Firestore is the read path for today's-stats/dashboard; the Form above (when
+    # enabled) is the system of record the original user already relies on. A
+    # Firestore hiccup shouldn't turn an otherwise-successful log into an error,
+    # so this is best-effort and logged, not raised.
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            resp = await client.post(FORM_POST_URL, data=payload)
-    except httpx.HTTPError as e:
-        return JSONResponse({"error": f"Could not reach Google Forms: {e}"}, status_code=502)
-
-    if resp.status_code != 200:
-        return JSONResponse(
-            {"error": f"Google Forms returned {resp.status_code}."}, status_code=502
-        )
-
-    # Google answers 200 either way: the confirmation page on success, or the form
-    # re-rendered with errors on rejection. The form element only exists in the latter.
-    if 'id="mG61Hd"' in resp.text or "FormviewerViewNavigationSubmitButton" in resp.text:
-        return JSONResponse(
-            {"error": "Google rejected the submission — use the manual form link below."},
-            status_code=502,
-        )
-
-    # Firestore is the read path for today's-stats/dashboard; the Form above is the
-    # system of record the user already relies on. A Firestore hiccup shouldn't turn
-    # an otherwise-successful log into an error, so this is best-effort and logged,
-    # not raised.
-    try:
-        _firestore().collection("logs").add({
+        _firestore().collection(_collection("logs")).add({
             "date": date.strip(),
             "meal_type": meal_type,
             "item": (item or "").strip(),
@@ -311,7 +328,7 @@ async def stats_today(date: str):
         return JSONResponse({"error": f"Bad date: {date!r} (expected YYYY-MM-DD)"}, status_code=400)
 
     try:
-        docs = _firestore().collection("logs").where(filter=FieldFilter("date", "==", date.strip())).stream()
+        docs = _firestore().collection(_collection("logs")).where(filter=FieldFilter("date", "==", date.strip())).stream()
     except Exception as e:
         return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
 
@@ -349,7 +366,7 @@ async def dashboard(date: str):
     try:
         docs = list(
             _firestore()
-            .collection("logs")
+            .collection(_collection("logs"))
             .where(filter=FieldFilter("date", ">=", start_str))
             .where(filter=FieldFilter("date", "<=", today_str))
             .stream()
@@ -423,7 +440,7 @@ async def log_update(
         return JSONResponse({"error": f"Unknown meal type: {meal_type!r}"}, status_code=400)
 
     try:
-        _firestore().collection("logs").document(log_id).set({
+        _firestore().collection(_collection("logs")).document(log_id).set({
             "date": date.strip(),
             "meal_type": meal_type,
             "item": (item or "").strip(),
@@ -440,7 +457,7 @@ async def log_update(
 async def log_delete(log_id: str):
     """Firestore-only, same caveat as log_update — the Sheet keeps its own copy."""
     try:
-        _firestore().collection("logs").document(log_id).delete()
+        _firestore().collection(_collection("logs")).document(log_id).delete()
     except Exception as e:
         return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
 
@@ -450,7 +467,7 @@ async def log_delete(log_id: str):
 @app.get("/library")
 async def library_list():
     try:
-        docs = _firestore().collection("library").order_by("name").stream()
+        docs = _firestore().collection(_collection("library")).order_by("name").stream()
     except Exception as e:
         return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
 
@@ -496,7 +513,7 @@ async def library_save(
     }
 
     try:
-        col = _firestore().collection("library")
+        col = _firestore().collection(_collection("library"))
         existing = list(col.where(filter=FieldFilter("name", "==", name)).limit(1).stream())
         if existing:
             existing[0].reference.set(data, merge=True)
@@ -526,7 +543,7 @@ async def library_update(
         return JSONResponse({"error": "Name is required."}, status_code=400)
 
     try:
-        _firestore().collection("library").document(item_id).set({
+        _firestore().collection(_collection("library")).document(item_id).set({
             "name": name,
             "meal_type": (meal_type or "").strip(),
             "calories": _num_field(calories),
@@ -544,7 +561,7 @@ async def library_update(
 @app.delete("/library/{item_id}")
 async def library_delete(item_id: str):
     try:
-        _firestore().collection("library").document(item_id).delete()
+        _firestore().collection(_collection("library")).document(item_id).delete()
     except Exception as e:
         return JSONResponse({"error": f"Could not reach Firestore: {e}"}, status_code=502)
 
